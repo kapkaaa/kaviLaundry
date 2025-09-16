@@ -1,0 +1,576 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ */
+package kavilaundry;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+import java.math.BigDecimal;
+import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.List;
+
+public class InputTransaksiForm extends JFrame {
+    private JTextField txtNamaPelanggan, txtBerat;
+    private JComboBox<String> cmbPaket;
+    private JSpinner spnDetergen, spnPewangi;
+    private JSpinner spnVoucherDigunakan;
+    private JTextArea txtRincian;
+    private JLabel lblTotal, lblStokDetergen, lblStokPewangi;
+    private JButton btnHitung, btnSimpan, btnCetak, btnTutup;
+    
+    private List<PaketLayanan> paketList = new ArrayList<>();
+    private double totalBiaya = 0;
+    private int idPelanggan = 0;
+    private int stokDetergen = 0, stokPewangi = 0;
+    
+    public InputTransaksiForm() {
+        initComponents();
+        loadPaketData();
+        loadStokAddon();
+        setLocationRelativeTo(null);
+    }
+    
+    private void initComponents() {
+        setTitle("Input Transaksi");
+        setSize(600, 580);
+        setLayout(new BorderLayout());
+        
+        // Form Panel
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        formPanel.setBorder(BorderFactory.createTitledBorder("Data Transaksi"));
+        
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // Nama Pelanggan
+        gbc.gridx = 0; gbc.gridy = 0;
+        formPanel.add(new JLabel("Nama Pelanggan:"), gbc);
+        gbc.gridx = 1;
+        txtNamaPelanggan = new JTextField(20);
+        formPanel.add(txtNamaPelanggan, gbc);
+        
+        // Paket
+        gbc.gridx = 0; gbc.gridy = 1;
+        formPanel.add(new JLabel("Paket Layanan:"), gbc);
+        gbc.gridx = 1;
+        cmbPaket = new JComboBox<>();
+        formPanel.add(cmbPaket, gbc);
+        
+        // Berat (untuk paket per kg)
+        gbc.gridx = 0; gbc.gridy = 2;
+        formPanel.add(new JLabel("Berat (kg):"), gbc);
+        gbc.gridx = 1;
+        txtBerat = new JTextField(20);
+        txtBerat.setText("1");
+        formPanel.add(txtBerat, gbc);
+        
+        // Addon Panel dengan Spinner
+        gbc.gridx = 0; gbc.gridy = 3;
+        formPanel.add(new JLabel("Addon:"), gbc);
+        gbc.gridx = 1;
+        JPanel addonPanel = new JPanel(new GridLayout(2, 3, 5, 5));
+        
+        // Detergen dengan Spinner
+        addonPanel.add(new JLabel("Detergen (Rp 1.000):"));
+        spnDetergen = new JSpinner(new SpinnerNumberModel(0, 0, 999, 1));
+        spnDetergen.setPreferredSize(new Dimension(60, 25));
+        addonPanel.add(spnDetergen);
+        lblStokDetergen = new JLabel("Stok: 0");
+        lblStokDetergen.setFont(new Font("Arial", Font.ITALIC, 10));
+        lblStokDetergen.setForeground(Color.BLUE);
+        addonPanel.add(lblStokDetergen);
+        
+        // Pewangi dengan Spinner
+        addonPanel.add(new JLabel("Pewangi (Rp 1.000):"));
+        spnPewangi = new JSpinner(new SpinnerNumberModel(0, 0, 999, 1));
+        spnPewangi.setPreferredSize(new Dimension(60, 25));
+        addonPanel.add(spnPewangi);
+        lblStokPewangi = new JLabel("Stok: 0");
+        lblStokPewangi.setFont(new Font("Arial", Font.ITALIC, 10));
+        lblStokPewangi.setForeground(Color.BLUE);
+        addonPanel.add(lblStokPewangi);
+        
+        formPanel.add(addonPanel, gbc);
+        
+        // Voucher
+        gbc.gridx = 0; gbc.gridy = 4;
+        formPanel.add(new JLabel("Gunakan Voucher:"), gbc);
+        gbc.gridx = 1;
+        spnVoucherDigunakan = new JSpinner(new SpinnerNumberModel(0, 0, 100, 1));
+        formPanel.add(spnVoucherDigunakan, gbc);
+        
+        // Buttons
+        JPanel btnPanel = new JPanel(new FlowLayout());
+        btnHitung = new JButton("Hitung Total");
+        btnSimpan = new JButton("Simpan");
+        btnCetak = new JButton("Cetak Struk");
+        btnTutup = new JButton("Tutup");
+        
+        btnHitung.addActionListener(e -> hitungTotal());
+        btnSimpan.addActionListener(e -> simpanTransaksi());
+        btnCetak.addActionListener(e -> cetakStruk());
+        btnTutup.addActionListener(e -> dispose());
+        
+        btnPanel.add(btnHitung);
+        btnPanel.add(btnSimpan);
+        btnPanel.add(btnCetak);
+        btnPanel.add(btnTutup);
+        
+        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2;
+        formPanel.add(btnPanel, gbc);
+        
+        // Rincian Panel
+        JPanel rincianPanel = new JPanel(new BorderLayout());
+        rincianPanel.setBorder(BorderFactory.createTitledBorder("Rincian Biaya"));
+        
+        txtRincian = new JTextArea(8, 40);
+        txtRincian.setEditable(false);
+        txtRincian.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        JScrollPane scrollRincian = new JScrollPane(txtRincian);
+        
+        lblTotal = new JLabel("TOTAL: Rp 0", SwingConstants.CENTER);
+        lblTotal.setFont(new Font("Arial", Font.BOLD, 16));
+        lblTotal.setOpaque(true);
+        lblTotal.setBackground(Color.YELLOW);
+        
+        rincianPanel.add(scrollRincian, BorderLayout.CENTER);
+        rincianPanel.add(lblTotal, BorderLayout.SOUTH);
+        
+        add(formPanel, BorderLayout.NORTH);
+        add(rincianPanel, BorderLayout.CENTER);
+        
+        btnSimpan.setEnabled(false);
+        btnCetak.setEnabled(false);
+        
+        // listener untuk validasi stok
+        spnDetergen.addChangeListener(e -> validateAddonStock());
+        spnPewangi.addChangeListener(e -> validateAddonStock());
+    }
+    
+    private void loadStokAddon() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String sql = "SELECT id_addon, nama_addon, stok FROM addon WHERE id_addon IN (1, 2)";
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            
+            while (rs.next()) {
+                int idAddon = rs.getInt("id_addon");
+                int stok = rs.getInt("stok");
+                
+                if(idAddon == 1) {
+                    stokDetergen = stok;
+                    lblStokDetergen.setText("Stok: " + stok);
+                    ((SpinnerNumberModel) spnDetergen.getModel()).setMaximum(stok);
+                } else if (idAddon == 2) {
+                    stokPewangi = stok;
+                    lblStokPewangi.setText("Stok: " + stok);
+                    ((SpinnerNumberModel) spnPewangi.getModel()).setMaximum(stok);
+                }
+            }
+        } catch (SQLException e ) {
+            JOptionPane.showMessageDialog(this, "Error loading stok addon: " + e.getMessage());
+        }
+    }
+    
+    private void validateAddonStock() {
+        int detergenQty = (Integer) spnDetergen.getValue();
+        int pewangiQty = (Integer) spnPewangi.getValue();
+        
+        if (detergenQty > stokDetergen) {
+            spnDetergen.setValue(stokDetergen);
+            JOptionPane.showMessageDialog(this, "Stok detergen tidak mencukupi! Maksimal: " + stokDetergen);
+        }
+        
+        if (pewangiQty > stokPewangi) {
+            spnPewangi.setValue(stokPewangi);
+            JOptionPane.showMessageDialog(this, "Stok Pewangi tidak mencukupi! Maksimal: " + stokPewangi);
+        }
+    }
+    
+    private void loadPaketData() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String sql = "SELECT * FROM paket ORDER BY nama, kapasitas";
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            
+            paketList.clear();
+            cmbPaket.removeAllItems();
+            
+            while (rs.next()) {
+                PaketLayanan paket = new PaketLayanan(
+                    rs.getInt("id"),
+                    rs.getString("nama"),
+                    rs.getString("kapasitas"),
+                    rs.getInt("harga"),
+                    rs.getString("keterangan")
+                );
+                paketList.add(paket);
+                cmbPaket.addItem(paket.toString());
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading paket: " + e.getMessage());
+        }
+    }
+    
+    private void hitungTotal() {
+        try {
+            String namaPelanggan = txtNamaPelanggan.getText().trim();
+            if (namaPelanggan.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Nama pelanggan harus diisi!");
+                return;
+            }
+            
+            int selectedPaketIndex = cmbPaket.getSelectedIndex();
+            if (selectedPaketIndex < 0) {
+                JOptionPane.showMessageDialog(this, "Pilih paket layanan!");
+                return;
+            }
+            
+            PaketLayanan selectedPaket = paketList.get(selectedPaketIndex);
+            double berat = Double.parseDouble(txtBerat.getText().trim());
+            
+            if (berat <= 0) {
+                JOptionPane.showMessageDialog(this, "Berat harus lebih dari 0!");
+                return;
+            }
+            
+            // Cek dan buat pelanggan jika belum ada
+            idPelanggan = getOrCreatePelanggan(namaPelanggan);
+            
+            // Hitung biaya dasar
+            double biayaDasar;
+            if (selectedPaket.kapasitas.equals("per kg")) {
+                biayaDasar = selectedPaket.harga * berat;
+            } else {
+                biayaDasar = selectedPaket.harga;
+            }
+            
+            // Tambah addon
+            int detergenQty = (Integer) spnDetergen.getValue();
+            int pewangiQty = (Integer) spnPewangi.getValue();
+            double biayaAddon = (detergenQty * 1000) + (pewangiQty * 1000);
+            
+            //validasi stok addon
+            if (detergenQty > stokDetergen) {
+                JOptionPane.showMessageDialog(this, "Stok detergen tidak cukup! stok: " + stokDetergen);
+                spnDetergen.setValue(stokDetergen);
+                return;
+            }
+            if (pewangiQty > stokDetergen) {
+                JOptionPane.showMessageDialog(this, "Stok pewangi tidak cukup! stok: " + stokPewangi);
+                spnPewangi.setValue(stokPewangi);
+                return;
+            }
+            
+            // Hitung voucher yang digunakan
+            int voucherDigunakan = (Integer) spnVoucherDigunakan.getValue();
+            double diskonVoucher = 0;
+            
+            if (voucherDigunakan == 7) {
+                // Cek voucher yang dimiliki pelanggan
+                int voucherTersedia = getVoucherPelanggan(idPelanggan);
+                if (voucherDigunakan > voucherTersedia) {
+                    JOptionPane.showMessageDialog(this, "Voucher tidak mencukupi! Tersedia: " + voucherTersedia);
+                    spnVoucherDigunakan.setValue(0);
+                    return;
+                } else if (voucherDigunakan < 7) {
+                    JOptionPane.showMessageDialog(this, "Voucher terlalu banyak! Dibutuhkan: 7");
+                    spnVoucherDigunakan.setValue(7);
+                    return;
+                }
+                
+                // Diskon voucher untuk cuci basah 7kg
+                if (selectedPaket.nama.contains("Cuci Basah") && selectedPaket.kapasitas.equals("7kg")) {
+                    int gratisCuci = Math.min(voucherDigunakan / 7, 1);
+                    if (gratisCuci > 0) {
+                        diskonVoucher = selectedPaket.harga * gratisCuci;
+                    }
+                }
+            }
+            
+            totalBiaya = biayaDasar + biayaAddon - diskonVoucher;
+            if (totalBiaya < 0) totalBiaya = 0;
+            
+            // Tampilkan rincian
+            StringBuilder rincian = new StringBuilder();
+            rincian.append("                   RINCIAN BIAYA                \n");
+            rincian.append("================================================\n");
+            rincian.append(String.format("Pelanggan    : %s\n", namaPelanggan));
+            rincian.append(String.format("Paket        : %s %s\n", selectedPaket.nama, selectedPaket.kapasitas));
+            rincian.append(String.format("Berat        : %.1f kg\n", berat));
+            rincian.append(String.format("Biaya Dasar  : Rp %,.0f\n", biayaDasar));
+            
+            if (biayaAddon > 0) {
+                rincian.append("Addon        :\n");
+                if (detergenQty > 0) {
+                    rincian.append(String.format(" - Detergen %dx : RP %,.0f\n", detergenQty, detergenQty * 1000.0));
+                }
+                if (pewangiQty > 0) {
+                    rincian.append(String.format(" - Pewangi %dx : RP %,.0f\n", pewangiQty, pewangiQty * 1000.0));
+                }
+                rincian.append(String.format("Total Addon : RP %,.0f\n", biayaAddon));
+            }
+            
+            if (diskonVoucher > 7) {
+                rincian.append(String.format("Diskon Voucher: -Rp %,.0f\n", diskonVoucher));
+                rincian.append(String.format("  (%d voucher digunakan)\n", voucherDigunakan));
+            }
+            
+            rincian.append("================================================\n");
+            rincian.append(String.format("TOTAL BAYAR  : Rp %,.0f\n", totalBiaya));
+            
+            txtRincian.setText(rincian.toString());
+            lblTotal.setText(String.format("TOTAL: Rp %,.0f", totalBiaya));
+            
+            btnSimpan.setEnabled(true);
+            
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Berat harus berupa angka!");
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+        }
+    }
+    
+    private int getOrCreatePelanggan(String nama) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            // Cek apakah pelanggan sudah ada
+            String checkSql = "SELECT id_pelanggan FROM pelanggan WHERE nama = ?";
+            PreparedStatement checkStmt = conn.prepareStatement(checkSql);
+            checkStmt.setString(1, nama);
+            ResultSet rs = checkStmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getInt("id_pelanggan");
+            } else {
+                // Buat pelanggan baru
+                String insertSql = "INSERT INTO pelanggan (nama, total_voucher) VALUES (?, 0)";
+                PreparedStatement insertStmt = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
+                insertStmt.setString(1, nama);
+                insertStmt.executeUpdate();
+                
+                ResultSet generatedKeys = insertStmt.getGeneratedKeys();
+                if (generatedKeys.next()) {
+                    return generatedKeys.getInt(1);
+                }
+            }
+        }
+        throw new SQLException("Gagal membuat pelanggan baru");
+    }
+    
+    private int getVoucherPelanggan(int idPelanggan) throws SQLException {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String sql = "SELECT total_voucher FROM pelanggan WHERE id_pelanggan = ?";
+            PreparedStatement pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, idPelanggan);
+            ResultSet rs = pstmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getInt("total_voucher");
+            }
+        }
+        return 0;
+    }
+    
+    private void simpanTransaksi() {
+        try {
+            if (totalBiaya == 0) {
+                JOptionPane.showMessageDialog(this, "Hitung total terlebih dahulu!");
+                return;
+            }
+            
+            int selectedPaketIndex = cmbPaket.getSelectedIndex();
+            PaketLayanan selectedPaket = paketList.get(selectedPaketIndex);
+            double berat = Double.parseDouble(txtBerat.getText().trim());
+            int voucherDigunakan = (Integer) spnVoucherDigunakan.getValue();
+            int detergenQty = (Integer) spnDetergen.getValue();
+            int pewangiQty = (Integer) spnPewangi.getValue();
+            
+            try (Connection conn = DatabaseConnection.getConnection()) {
+                conn.setAutoCommit(false);
+                
+                // Simpan transaksi
+                String insertTransaksiSql = "INSERT INTO transaksi (id_pelanggan, id_jenis, berat_kg, " +
+                    "tingkat_cuci, total_biaya, addon_ids, voucher_didapat, status_pesanan, id_user) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, 'diterima', ?)";
+                
+                PreparedStatement pstmt = conn.prepareStatement(insertTransaksiSql, Statement.RETURN_GENERATED_KEYS);
+                pstmt.setInt(1, idPelanggan);
+                pstmt.setInt(2, selectedPaket.id); // Menggunakan ID paket sebagai jenis
+                pstmt.setDouble(3, berat);
+                pstmt.setString(4, selectedPaket.kapasitas);
+                pstmt.setDouble(5, totalBiaya);
+                
+                // Addon IDs
+                StringBuilder addonIds = new StringBuilder();
+                if (detergenQty > 0) {
+                    for (int i = 0; i < detergenQty; i++) {
+                        if (addonIds.length() > 0) addonIds.append(",");
+                        addonIds.append("1");
+                    }
+                }
+                if (pewangiQty > 0) {
+                    for (int i = 0; i < pewangiQty; i++){
+                        if (addonIds.length() > 0) addonIds.append(",");
+                        addonIds.append("2");
+                    }
+                }
+                String addonIdsStr = addonIds.length() > 0 ? addonIds.toString() : null;
+                pstmt.setString(6, addonIdsStr);
+                
+                // Voucher yang didapat (1 voucher per transaksi)
+                pstmt.setInt(7, 1);
+                pstmt.setInt(8, UserSession.getCurrentUserId());
+                
+                pstmt.executeUpdate();
+                ResultSet generatedKeys = pstmt.getGeneratedKeys();
+                int idTransaksi = 0;
+                if (generatedKeys.next()) {
+                    idTransaksi = generatedKeys.getInt(1);
+                }
+                
+                // Update voucher pelanggan
+                String updateVoucherSql = "UPDATE pelanggan SET total_voucher = total_voucher + 1 - ? WHERE id_pelanggan = ?";
+                PreparedStatement updateVoucherStmt = conn.prepareStatement(updateVoucherSql);
+                updateVoucherStmt.setInt(1, voucherDigunakan);
+                updateVoucherStmt.setInt(2, idPelanggan);
+                updateVoucherStmt.executeUpdate();
+                
+                // Update stok addon jika digunakan
+                if (detergenQty > 0) {
+                    String updateStokSql = "UPDATE addon SET stok = stok - ? WHERE id_addon = 1";
+                    PreparedStatement updateStokStmt = conn.prepareStatement(updateStokSql);
+                    updateStokStmt.setInt(1, detergenQty);
+                    updateStokStmt.executeUpdate();
+                }
+                if (pewangiQty > 0) {
+                    String updateStokSql = "UPDATE addon SET stok = stok - ? WHERE id_addon = 2";
+                    PreparedStatement updateStokStmt = conn.prepareStatement(updateStokSql);
+                    updateStokStmt.setInt(1, pewangiQty);
+                    updateStokStmt.executeUpdate();
+                }
+                
+                conn.commit();
+                
+                JOptionPane.showMessageDialog(this, "Transaksi berhasil disimpan!\nID Transaksi: " + idTransaksi);
+                btnCetak.setEnabled(true);
+                
+                loadStokAddon();
+                
+                // clearForm();
+                
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(this, "Error menyimpan transaksi: " + e.getMessage());
+            }
+            
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+        }
+    }
+    
+    private void clearForm() {
+        txtNamaPelanggan.setText("");
+        if (cmbPaket.getItemCount() > 0) cmbPaket.setSelectedIndex(0);
+        txtBerat.setText("");
+        spnDetergen.setValue(0);
+        spnPewangi.setValue(0);
+        spnVoucherDigunakan.setValue(0);
+        txtRincian.setText("");
+        lblTotal.setText("TOTAL: RP 0");
+        totalBiaya = 0;
+        idPelanggan = 0;
+        btnSimpan.setEnabled(false);
+        btnCetak.setEnabled(false);
+        
+        
+    }
+    
+    private void cetakStruk() {
+        if (totalBiaya == 0) {
+            JOptionPane.showMessageDialog(this, "Belum ada transaksi untuk dicetak!");
+            return;
+        }
+        
+        // Buat dialog untuk menampilkan struk
+        JDialog strukDialog = new JDialog(this, "Struk Transaksi", true);
+        strukDialog.setSize(400, 500);
+        strukDialog.setLocationRelativeTo(this);
+        
+        JTextArea txtStruk = new JTextArea();
+        txtStruk.setEditable(false);
+        txtStruk.setFont(new Font("Monospaced", Font.PLAIN, 11));
+        
+        StringBuilder struk = new StringBuilder();
+        struk.append("                  KAVI LAUNDRY                  \n");
+        struk.append("               Jl. Contoh No. 123               \n");
+        struk.append("              Telp: 0812-3456-7890              \n");
+        struk.append("================================================\n");
+        struk.append("                STRUK PEMBAYARAN                \n");
+        struk.append("================================================\n");
+        struk.append(String.format("Tanggal  : %s\n", new java.util.Date()));
+        struk.append(String.format("Kasir    : %s\n", UserSession.getCurrentUsername()));
+        struk.append("------------------------------------------------\n");
+        struk.append(txtRincian.getText());
+        struk.append("\n");
+        struk.append("         Terima kasih atas kepercayaan          \n");
+        struk.append("                Anda kepada kami                \n");
+        struk.append("================================================\n");
+        struk.append("* Simpan struk ini sebagai   \n");
+        struk.append("  bukti pengambilan laundry  \n");
+        
+        txtStruk.setText(struk.toString());
+        
+        JScrollPane scrollPane = new JScrollPane(txtStruk);
+        JButton btnPrint = new JButton("Print");
+        JButton btnClose = new JButton("Tutup");
+        
+        btnPrint.addActionListener(e -> {
+            // Implementasi print - bisa menggunakan Java Print API
+            try {
+                txtStruk.print();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(strukDialog, "Error printing: " + ex.getMessage());
+            }
+        });
+        
+        btnClose.addActionListener(e -> {
+            strukDialog.dispose();
+            clearForm();
+        });
+        
+        
+        JPanel btnPanel = new JPanel(new FlowLayout());
+        btnPanel.add(btnPrint);
+        btnPanel.add(btnClose);
+        
+        strukDialog.add(scrollPane, BorderLayout.CENTER);
+        strukDialog.add(btnPanel, BorderLayout.SOUTH);
+        strukDialog.setVisible(true);
+    }
+    
+    // Inner class untuk menyimpan data paket
+    private class PaketLayanan {
+        int id;
+        String nama;
+        String kapasitas;
+        int harga;
+        String keterangan;
+        
+        public PaketLayanan(int id, String nama, String kapasitas, int harga, String keterangan) {
+            this.id = id;
+            this.nama = nama;
+            this.kapasitas = kapasitas;
+            this.harga = harga;
+            this.keterangan = keterangan;
+        }
+        
+        @Override
+        public String toString() {
+            return nama + " " + kapasitas + " - Rp " + String.format("%,d", harga);
+        }
+    }
+}
