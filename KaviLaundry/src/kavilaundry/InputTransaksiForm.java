@@ -92,6 +92,7 @@ public class InputTransaksiForm extends JFrame {
         formPanel.add(lblMetodePembayaran, gbc);
         gbc.gridx = 1;
         cmbMetodePembayaran = new JComboBox<>(new String[]{"Cash", "QRIS"});
+        cmbMetodePembayaran.setSelectedIndex(-1);
         formPanel.add(cmbMetodePembayaran, gbc);
         
         // Listener untuk cmbWaktuBayar
@@ -326,8 +327,12 @@ public class InputTransaksiForm extends JFrame {
             rincian.append("=================================================\n");
             rincian.append(String.format("TOTAL BAYAR     : Rp %,.0f\n", totalBiaya));
             rincian.append("=================================================\n");
-            rincian.append(String.format("Metode Bayar    : %s\n", metodePembayaran));
-            rincian.append(String.format("Waktu Bayar     : %s\n", waktuBayar));
+            if (waktuBayar == "Bayar Setelah Selesai") {
+                rincian.append(String.format("Waktu Bayar     : %s\n", waktuBayar));
+            }  
+            if (metodePembayaran != null && !metodePembayaran.isEmpty()) {
+                rincian.append(String.format("Metode Bayar    : %s\n", metodePembayaran));
+            }
             
             txtRincian.setText(rincian.toString());
             lblTotal.setText(String.format("TOTAL: Rp %,.0f", totalBiaya));
@@ -394,6 +399,13 @@ public class InputTransaksiForm extends JFrame {
             boolean voucherDigunakan = chkVoucherDigunakan.isSelected();
             String metodePembayaran = (String) cmbMetodePembayaran.getSelectedItem();
             String waktuBayar = (String) cmbWaktuBayar.getSelectedItem();
+            String value4;
+            if (metodePembayaran == null || metodePembayaran.isEmpty()) {
+                value4 = waktuBayar; // kalau kosong, simpan hanya waktuBayar
+            } else {
+                value4 = metodePembayaran + " - " + waktuBayar;
+            }
+
             
             try (Connection conn = DatabaseConnection.getConnection()) {
                 conn.setAutoCommit(false);
@@ -405,7 +417,7 @@ public class InputTransaksiForm extends JFrame {
                 pstmt.setInt(1, idPelanggan);
                 pstmt.setInt(2, selectedPaket.id);
                 pstmt.setDouble(3, berat);
-                pstmt.setString(4, metodePembayaran + " - " + waktuBayar);
+                pstmt.setString(4, value4);
                 pstmt.setDouble(5, totalBiaya);
                 pstmt.setInt(6, 1); // Setiap transaksi dapat 1 voucher
                 pstmt.setInt(7, UserSession.getCurrentUserId());
@@ -455,7 +467,7 @@ public class InputTransaksiForm extends JFrame {
         }
         txtBerat.setText("1");
         chkVoucherDigunakan.setSelected(false);
-        cmbMetodePembayaran.setSelectedIndex(0);
+        cmbMetodePembayaran.setSelectedIndex(-1);
         cmbWaktuBayar.setSelectedIndex(0);
         txtRincian.setText("");
         lblTotal.setText("TOTAL: Rp 0");
