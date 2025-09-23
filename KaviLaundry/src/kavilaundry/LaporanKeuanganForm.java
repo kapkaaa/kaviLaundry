@@ -1,6 +1,5 @@
 /*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ * LaporanKeuanganForm.java - Updated dengan Metode Pembayaran dan Filter Pending
  */
 package kavilaundry;
 
@@ -17,7 +16,7 @@ public class LaporanKeuanganForm extends JFrame {
     private JDateChooser dateFrom, dateTo;
     private JTable table;
     private DefaultTableModel model;
-    private JLabel lblTotalPendapatan, lblTotalTransaksi;
+    private JLabel lblTotalPendapatan, lblTotalTransaksi, lblTotalCash, lblTotalQRIS;
     private JButton btnFilter, btnExport, btnTutup;
     
     public LaporanKeuanganForm() {
@@ -28,7 +27,7 @@ public class LaporanKeuanganForm extends JFrame {
     
     private void initComponents() {
         setTitle("Laporan Keuangan");
-        setSize(900, 600);
+        setSize(1000, 700);
         setLayout(new BorderLayout());
         
         // Panel Filter
@@ -59,29 +58,60 @@ public class LaporanKeuanganForm extends JFrame {
         filterPanel.add(btnExport);
         filterPanel.add(btnTutup);
         
-        // Summary Panel
-        JPanel summaryPanel = new JPanel(new GridLayout(1, 2, 10, 0));
+        // Summary Panel dengan 4 kolom
+        JPanel summaryPanel = new JPanel(new GridLayout(2, 2, 10, 5));
         summaryPanel.setBorder(BorderFactory.createTitledBorder("Ringkasan"));
         
         lblTotalPendapatan = new JLabel("Total Pendapatan: Rp 0", SwingConstants.CENTER);
         lblTotalPendapatan.setFont(new Font("Arial", Font.BOLD, 14));
         lblTotalPendapatan.setOpaque(true);
         lblTotalPendapatan.setBackground(Color.GREEN);
-        lblTotalPendapatan.setForeground(Color.WHITE);
+        lblTotalPendapatan.setForeground(Color.BLACK);
         
         lblTotalTransaksi = new JLabel("Total Transaksi: 0", SwingConstants.CENTER);
         lblTotalTransaksi.setFont(new Font("Arial", Font.BOLD, 14));
         lblTotalTransaksi.setOpaque(true);
-        lblTotalTransaksi.setBackground(Color.BLUE);
-        lblTotalTransaksi.setForeground(Color.WHITE);
+        lblTotalTransaksi.setBackground(Color.CYAN);
+        lblTotalTransaksi.setForeground(Color.BLACK);
+        
+        lblTotalCash = new JLabel("Cash: Rp 0", SwingConstants.CENTER);
+        lblTotalCash.setFont(new Font("Arial", Font.BOLD, 14));
+        lblTotalCash.setOpaque(true);
+        lblTotalCash.setBackground(new Color(255, 165, 0)); // Orange
+        lblTotalCash.setForeground(Color.BLACK);
+        
+        lblTotalQRIS = new JLabel("QRIS: Rp 0", SwingConstants.CENTER);
+        lblTotalQRIS.setFont(new Font("Arial", Font.BOLD, 14));
+        lblTotalQRIS.setOpaque(true);
+        lblTotalQRIS.setBackground(Color.MAGENTA); // Purple
+        lblTotalQRIS.setForeground(Color.BLACK);
         
         summaryPanel.add(lblTotalPendapatan);
         summaryPanel.add(lblTotalTransaksi);
+        summaryPanel.add(lblTotalCash);
+        summaryPanel.add(lblTotalQRIS);
         
-        // Table
-        String[] columns = {"Tanggal", "ID Transaksi", "Pelanggan", "Paket", "Total", "Status", "Kasir"};
-        model = new DefaultTableModel(columns, 0);
+        // Table dengan kolom metode pembayaran
+        String[] columns = {"Tanggal", "ID Transaksi", "Pelanggan", "Paket", "Berat", "Total", "Metode Bayar", "Status", "Kasir"};
+        model = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        
         table = new JTable(model);
+        
+        // Set column widths
+        table.getColumnModel().getColumn(0).setPreferredWidth(120); // Tanggal
+        table.getColumnModel().getColumn(1).setPreferredWidth(50);  // ID
+        table.getColumnModel().getColumn(2).setPreferredWidth(120); // Pelanggan
+        table.getColumnModel().getColumn(3).setPreferredWidth(150); // Paket
+        table.getColumnModel().getColumn(4).setPreferredWidth(70);  // Berat
+        table.getColumnModel().getColumn(5).setPreferredWidth(100); // Total
+        table.getColumnModel().getColumn(6).setPreferredWidth(150); // Metode Bayar
+        table.getColumnModel().getColumn(7).setPreferredWidth(100); // Status
+        table.getColumnModel().getColumn(8).setPreferredWidth(100); // Kasir
         
         JScrollPane scrollPane = new JScrollPane(table);
         
@@ -110,17 +140,28 @@ public class LaporanKeuanganForm extends JFrame {
         
         model.setRowCount(0);
         double totalPendapatan = 0;
+        double totalCash = 0;
+        double totalQRIS = 0;
         int totalTransaksi = 0;
         
         try (Connection conn = DatabaseConnection.getConnection()) {
             String sql = "SELECT t.tanggal_transaksi, t.id_transaksi, p.nama, " +
-                        "pk.nama as paket_nama, pk.kapasitas, t.total_biaya, " +
-                        "t.status_pesanan, u.username " +
+                        "pk.nama as paket_nama, t.berat_kg, t.total_biaya, " +
+                        "t.status_pesanan, u.username, t.pembayaran, " +
+                        "CASE " +
+                        "   WHEN t.pembayaran LIKE '%Bayar Sekarang%' THEN 'Lunas' " +
+                        "   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.status_pesanan = 'selesai' AND t.pembayaran NOT LIKE '%LUNAS%' THEN 'Belum Bayar' " +
+                        "   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.pembayaran LIKE '%LUNAS%' THEN 'Lunas' " +
+                        "   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' THEN 'Pending' " +
+                        "   ELSE 'Lunas' " +
+                        "END as status_bayar " +
                         "FROM transaksi t " +
                         "LEFT JOIN pelanggan p ON t.id_pelanggan = p.id_pelanggan " +
                         "LEFT JOIN paket pk ON t.id_jenis = pk.id " +
                         "LEFT JOIN user u ON t.id_user = u.id_user " +
                         "WHERE DATE(t.tanggal_transaksi) BETWEEN ? AND ? " +
+                        // HANYA TRANSAKSI YANG SUDAH LUNAS (tidak termasuk pending/belum bayar)
+                        "AND NOT (t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.pembayaran NOT LIKE '%LUNAS%') " +
                         "ORDER BY t.tanggal_transaksi DESC";
             
             PreparedStatement pstmt = conn.prepareStatement(sql);
@@ -132,16 +173,37 @@ public class LaporanKeuanganForm extends JFrame {
             
             while (rs.next()) {
                 double biaya = rs.getDouble("total_biaya");
-                totalPendapatan += biaya;
-                totalTransaksi++;
+                String statusBayar = rs.getString("status_bayar");
+                String tingkatCuci = rs.getString("pembayaran");
+                
+                // Hanya hitung yang sudah lunas
+                if ("Lunas".equals(statusBayar)) {
+                    totalPendapatan += biaya;
+                    totalTransaksi++;
+                    
+                    // Pisahkan berdasarkan metode pembayaran
+                    if (tingkatCuci != null && tingkatCuci.contains("QRIS")) {
+                        totalQRIS += biaya;
+                    } else {
+                        totalCash += biaya;
+                    }
+                }
+                
+                // Extract metode pembayaran untuk display
+                String metodeBayar = "Cash - Bayar Sekarang";
+                if (tingkatCuci != null) {
+                    metodeBayar = tingkatCuci.replace(" - LUNAS", "");
+                }
                 
                 Object[] row = {
                     sdf.format(rs.getTimestamp("tanggal_transaksi")),
                     rs.getInt("id_transaksi"),
                     rs.getString("nama"),
-                    rs.getString("paket_nama") + " " + rs.getString("kapasitas"),
+                    rs.getString("paket_nama"),
+                    rs.getDouble("berat_kg") + " kg",
                     "Rp " + String.format("%,.0f", biaya),
-                    rs.getString("status_pesanan"),
+                    metodeBayar,
+                    statusBayar,
                     rs.getString("username")
                 };
                 model.addRow(row);
@@ -150,6 +212,8 @@ public class LaporanKeuanganForm extends JFrame {
             // Update summary
             lblTotalPendapatan.setText("Total Pendapatan: Rp " + String.format("%,.0f", totalPendapatan));
             lblTotalTransaksi.setText("Total Transaksi: " + totalTransaksi);
+            lblTotalCash.setText("Cash: Rp " + String.format("%,.0f", totalCash));
+            lblTotalQRIS.setText("QRIS: Rp " + String.format("%,.0f", totalQRIS));
             
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading data: " + e.getMessage());
@@ -157,11 +221,14 @@ public class LaporanKeuanganForm extends JFrame {
     }
     
     private void exportToExcel() {
-        // Implementasi sederhana export ke CSV (bisa dibuka di Excel)
+        // Implementasi export ke CSV dengan data yang sudah difilter
         try {
             JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Simpan Laporan");
-            fileChooser.setSelectedFile(new java.io.File("laporan_keuangan.csv"));
+            fileChooser.setDialogTitle("Simpan Laporan Keuangan");
+            
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
+            String defaultFileName = "laporan_keuangan_" + sdf.format(new Date()) + ".csv";
+            fileChooser.setSelectedFile(new java.io.File(defaultFileName));
             
             int userSelection = fileChooser.showSaveDialog(this);
             
@@ -170,7 +237,13 @@ public class LaporanKeuanganForm extends JFrame {
                 
                 try (java.io.PrintWriter writer = new java.io.PrintWriter(fileToSave)) {
                     // Write header
-                    writer.println("Tanggal,ID Transaksi,Pelanggan,Paket,Total,Status,Kasir");
+                    writer.println("LAPORAN KEUANGAN KAVI LAUNDRY");
+                    writer.println("Periode: " + new SimpleDateFormat("dd/MM/yyyy").format(dateFrom.getDate()) + 
+                                  " - " + new SimpleDateFormat("dd/MM/yyyy").format(dateTo.getDate()));
+                    writer.println();
+                    
+                    // Write column headers
+                    writer.println("Tanggal,ID Transaksi,Pelanggan,Paket,Berat,Total,Metode Bayar,Status,Kasir");
                     
                     // Write data
                     for (int i = 0; i < model.getRowCount(); i++) {
@@ -188,6 +261,31 @@ public class LaporanKeuanganForm extends JFrame {
                     writer.println("RINGKASAN");
                     writer.println(lblTotalPendapatan.getText().replace("Total Pendapatan: ", "Total Pendapatan,"));
                     writer.println(lblTotalTransaksi.getText().replace("Total Transaksi: ", "Total Transaksi,"));
+                    writer.println();
+                    writer.println("BREAKDOWN METODE PEMBAYARAN");
+                    writer.println(lblTotalCash.getText().replace("Cash: ", "Pembayaran Tunai,"));
+                    writer.println(lblTotalQRIS.getText().replace("QRIS: ", "Pembayaran Non Tunai,"));
+                    
+                    // Persentase
+                    double totalPendapatan = 0;
+                    String totalText = lblTotalPendapatan.getText().replace("Total Pendapatan: Rp ", "").replace(",", "");
+                    try {
+                        totalPendapatan = Double.parseDouble(totalText);
+                        if (totalPendapatan > 0) {
+                            double totalCashValue = Double.parseDouble(lblTotalCash.getText().replace("Cash: Rp ", "").replace(",", ""));
+                            double totalQRISValue = Double.parseDouble(lblTotalQRIS.getText().replace("QRIS: Rp ", "").replace(",", ""));
+                            
+                            double persenCash = (totalCashValue / totalPendapatan) * 100;
+                            double persenQRIS = (totalQRISValue / totalPendapatan) * 100;
+                            
+                            writer.println();
+                            writer.println("PERSENTASE METODE PEMBAYARAN");
+                            writer.println("Tunai," + String.format("%.1f%%", persenCash));
+                            writer.println("Non Tunai," + String.format("%.1f%%", persenQRIS));
+                        }
+                    } catch (NumberFormatException e) {
+                        // Skip percentage calculation if parsing fails
+                    }
                     
                     JOptionPane.showMessageDialog(this, "Laporan berhasil diekspor ke: " + fileToSave.getAbsolutePath());
                     
