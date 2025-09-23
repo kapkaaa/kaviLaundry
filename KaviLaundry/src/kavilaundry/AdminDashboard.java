@@ -9,7 +9,7 @@ import java.awt.*;
 import java.awt.event.*;
 
 public class AdminDashboard extends JFrame {
-    private JButton btnKelolaPegawai, btnKelolaHarga, btnKelolaAlat;
+    private JButton btnKelolaPegawai, btnKelolaHarga;
     private JButton btnRiwayatTransaksi, btnLaporanKeuangan, btnKelolaVoucher;
     private JButton btnLogout;
     
@@ -39,7 +39,6 @@ public class AdminDashboard extends JFrame {
         
         btnKelolaPegawai = createMenuButton("Kelola Pegawai", "👥");
         btnKelolaHarga = createMenuButton("Kelola Harga Layanan", "💰");
-        btnKelolaAlat = createMenuButton("Kelola Alat", "🛠️");
         btnRiwayatTransaksi = createMenuButton("Riwayat Transaksi", "📋");
         btnLaporanKeuangan = createMenuButton("Laporan Keuangan", "📊");
         btnKelolaVoucher = createMenuButton("Kelola Voucher", "🎫");
@@ -47,7 +46,6 @@ public class AdminDashboard extends JFrame {
         
         menuPanel.add(btnKelolaPegawai);
         menuPanel.add(btnKelolaHarga);
-        menuPanel.add(btnKelolaAlat);
         menuPanel.add(btnRiwayatTransaksi);
         menuPanel.add(btnLaporanKeuangan);
         menuPanel.add(btnKelolaVoucher);
@@ -58,7 +56,6 @@ public class AdminDashboard extends JFrame {
         // Event Listeners
         btnKelolaPegawai.addActionListener(e -> new KelolaPegawaiForm().setVisible(true));
         btnKelolaHarga.addActionListener(e -> new KelolaHargaForm().setVisible(true));
-        btnKelolaAlat.addActionListener(e -> new KelolaAlatForm().setVisible(true));
         btnRiwayatTransaksi.addActionListener(e -> new RiwayatTransaksiForm().setVisible(true));
         btnLaporanKeuangan.addActionListener(e -> new LaporanKeuanganForm().setVisible(true));
         btnKelolaVoucher.addActionListener(e -> new VoucherManagementForm().setVisible(true));
