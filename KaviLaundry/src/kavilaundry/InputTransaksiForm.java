@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class InputTransaksiForm extends JFrame {
-    private JTextField txtNamaPelanggan, txtBerat;
+    private JTextField txtNamaPelanggan, txtBerat, txtid;
     private JComboBox<String> cmbPaket, cmbWaktuBayar, cmbMetodePembayaran;
     private JCheckBox chkVoucherDigunakan;
     private JTextArea txtRincian;
@@ -21,10 +21,12 @@ public class InputTransaksiForm extends JFrame {
     private List<PaketLayanan> paketList = new ArrayList<>();
     private double totalBiaya = 0;
     private int idPelanggan = 0;
+    private int currentTransactionId = 0;
     
     public InputTransaksiForm() {
         initComponents();
         loadPaketData();
+        generateNextTransactionId();
         setLocationRelativeTo(null);
     }
     
@@ -41,15 +43,24 @@ public class InputTransaksiForm extends JFrame {
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.anchor = GridBagConstraints.WEST;
         
-        // Nama Pelanggan
+        // ID Transaksi (readonly)
         gbc.gridx = 0; gbc.gridy = 0;
+        formPanel.add(new JLabel("ID Transaksi:"), gbc);
+        gbc.gridx = 1;
+        txtid = new JTextField(20);
+        txtid.setEditable(false);
+        txtid.setBackground(Color.LIGHT_GRAY);
+        formPanel.add(txtid, gbc);
+        
+        // Nama Pelanggan
+        gbc.gridx = 0; gbc.gridy = 1;
         formPanel.add(new JLabel("Nama Pelanggan:"), gbc);
         gbc.gridx = 1;
         txtNamaPelanggan = new JTextField(20);
         formPanel.add(txtNamaPelanggan, gbc);
         
         // Paket
-        gbc.gridx = 0; gbc.gridy = 1;
+        gbc.gridx = 0; gbc.gridy = 2;
         formPanel.add(new JLabel("Paket Layanan:"), gbc);
         gbc.gridx = 1;
         cmbPaket = new JComboBox<>();
@@ -57,7 +68,7 @@ public class InputTransaksiForm extends JFrame {
         formPanel.add(cmbPaket, gbc);
         
         // Berat
-        gbc.gridx = 0; gbc.gridy = 2;
+        gbc.gridx = 0; gbc.gridy = 3;
         formPanel.add(new JLabel("Berat (kg):"), gbc);
         gbc.gridx = 1;
         txtBerat = new JTextField(20);
@@ -65,7 +76,7 @@ public class InputTransaksiForm extends JFrame {
         formPanel.add(txtBerat, gbc);
         
         // Voucher dengan info
-        gbc.gridx = 0; gbc.gridy = 3;
+        gbc.gridx = 0; gbc.gridy = 4;
         formPanel.add(new JLabel("Gunakan Voucher:"), gbc);
         gbc.gridx = 1;
         JPanel voucherPanel = new JPanel(new BorderLayout());
@@ -80,7 +91,7 @@ public class InputTransaksiForm extends JFrame {
         formPanel.add(voucherPanel, gbc);
         
         // Waktu Pembayaran
-        gbc.gridx = 0; gbc.gridy = 4;
+        gbc.gridx = 0; gbc.gridy = 5;
         formPanel.add(new JLabel("Waktu Pembayaran:"), gbc);
         gbc.gridx = 1;
         cmbWaktuBayar = new JComboBox<>(new String[]{"Bayar Sekarang", "Bayar Setelah Selesai"});
@@ -88,7 +99,7 @@ public class InputTransaksiForm extends JFrame {
         
         // Metode Pembayaran
         JLabel lblMetodePembayaran = new JLabel("Metode Pembayaran:");
-        gbc.gridx = 0; gbc.gridy = 5;
+        gbc.gridx = 0; gbc.gridy = 6;
         formPanel.add(lblMetodePembayaran, gbc);
         gbc.gridx = 1;
         cmbMetodePembayaran = new JComboBox<>(new String[]{"Cash", "QRIS"});
@@ -128,7 +139,7 @@ public class InputTransaksiForm extends JFrame {
         btnPanel.add(btnCetak);
         btnPanel.add(btnTutup);
         
-        gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 2;
+        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2;
         formPanel.add(btnPanel, gbc);
         
         // Rincian Panel
@@ -162,6 +173,23 @@ public class InputTransaksiForm extends JFrame {
                 updateVoucherInfo();
             }
         });
+    }
+    
+    private void generateNextTransactionId() {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String sql = "SELECT COALESCE(MAX(id_transaksi), 0) + 1 as next_id FROM transaksi";
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            
+            if (rs.next()) {
+                currentTransactionId = rs.getInt("next_id");
+                txtid.setText(String.valueOf(currentTransactionId));
+            }
+        } catch (SQLException e) {
+            // Jika ada error, gunakan timestamp sebagai fallback
+            currentTransactionId = (int) (System.currentTimeMillis() % 1000000);
+            txtid.setText(String.valueOf(currentTransactionId));
+        }
     }
     
     private void updateVoucherVisibility() {
@@ -411,7 +439,9 @@ public class InputTransaksiForm extends JFrame {
                 conn.setAutoCommit(false);
                 
                 // Simpan transaksi
-                String insertTransaksiSql = "INSERT INTO transaksi (id_pelanggan, id_jenis,                 berat_kg, " + "pembayaran, total_biaya, voucher_didapat, status_pesanan,                  id_user) " + "VALUES (?, ?, ?, ?, ?, ?, 'diterima', ?)";
+                String insertTransaksiSql = "INSERT INTO transaksi (id_pelanggan, id_jenis, berat_kg, " + 
+                                          "pembayaran, total_biaya, voucher_didapat, status_pesanan, id_user) " +
+                                          "VALUES (?, ?, ?, ?, ?, ?, 'diterima', ?)";
                 
                 PreparedStatement pstmt = conn.prepareStatement(insertTransaksiSql, Statement.RETURN_GENERATED_KEYS);
                 pstmt.setInt(1, idPelanggan);
@@ -424,9 +454,11 @@ public class InputTransaksiForm extends JFrame {
                 
                 pstmt.executeUpdate();
                 ResultSet generatedKeys = pstmt.getGeneratedKeys();
-                int idTransaksi = 0;
+                int actualIdTransaksi = 0;
                 if (generatedKeys.next()) {
-                    idTransaksi = generatedKeys.getInt(1);
+                    actualIdTransaksi = generatedKeys.getInt(1);
+                    // Update field txtid dengan ID yang sebenarnya dari database
+                    txtid.setText(String.valueOf(actualIdTransaksi));
                 }
                 
                 if (voucherDigunakan) {
@@ -447,7 +479,8 @@ public class InputTransaksiForm extends JFrame {
                 
                 conn.commit();
                 
-                JOptionPane.showMessageDialog(this, "Transaksi berhasil disimpan!\nID Transaksi: " + idTransaksi);
+                clearForSimpan();
+                JOptionPane.showMessageDialog(this, "Transaksi berhasil disimpan!\nID Transaksi: " + actualIdTransaksi);
                 btnCetak.setEnabled(true);
                 
             } catch (SQLException e) {
@@ -459,7 +492,21 @@ public class InputTransaksiForm extends JFrame {
         }
     }
     
+    private void clearForSimpan() {
+        txtid.setText("");
+        txtNamaPelanggan.setText("");
+        if (cmbPaket.getItemCount() > 0) {
+            cmbPaket.setSelectedIndex(0);
+            updateVoucherVisibility();
+        }
+        txtBerat.setText("1");
+        chkVoucherDigunakan.setSelected(false);
+        cmbMetodePembayaran.setSelectedIndex(-1);
+        cmbWaktuBayar.setSelectedIndex(0);
+    }
+    
     private void clearForm() {
+        txtid.setText("");
         txtNamaPelanggan.setText("");
         if (cmbPaket.getItemCount() > 0) {
             cmbPaket.setSelectedIndex(0);
@@ -476,6 +523,9 @@ public class InputTransaksiForm extends JFrame {
         idPelanggan = 0;
         btnSimpan.setEnabled(false);
         btnCetak.setEnabled(false);
+        
+        // Generate ID transaksi baru untuk transaksi berikutnya
+        generateNextTransactionId();
     }
     
     private void cetakStruk() {
