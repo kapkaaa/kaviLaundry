@@ -9,7 +9,7 @@ import java.awt.*;
 import java.awt.event.*;
 
 public class KasirDashboard extends JFrame {
-    private JButton btnInputTransaksi, btnRiwayatTransaksi, btnStatusPesanan, btnLogout;
+    private JButton btnInputTransaksi, btnRiwayatTransaksi, btnLaporanKeuangan,btnStatusPesanan, btnLogout;
     
     public KasirDashboard() {
         initComponents();
@@ -38,11 +38,13 @@ public class KasirDashboard extends JFrame {
         btnInputTransaksi = createMenuButton("Input Transaksi", "💳");
         btnRiwayatTransaksi = createMenuButton("Riwayat Transaksi", "📋");
         btnStatusPesanan = createMenuButton("Status Pesanan", "📦");
+        btnLaporanKeuangan = createMenuButton("Laporan Keuangan", "📊");
         btnLogout = createMenuButton("Logout", "🚪");
         
         menuPanel.add(btnInputTransaksi);
         menuPanel.add(btnRiwayatTransaksi);
         menuPanel.add(btnStatusPesanan);
+        menuPanel.add(btnLaporanKeuangan);
         menuPanel.add(btnLogout);
         
         add(menuPanel, BorderLayout.CENTER);
@@ -51,6 +53,7 @@ public class KasirDashboard extends JFrame {
         btnInputTransaksi.addActionListener(e -> new InputTransaksiForm().setVisible(true));
         btnRiwayatTransaksi.addActionListener(e -> new RiwayatTransaksiForm().setVisible(true));
         btnStatusPesanan.addActionListener(e -> new StatusPesananForm().setVisible(true));
+        btnLaporanKeuangan.addActionListener(e -> new LaporanKeuanganForm().setVisible(true));
         btnLogout.addActionListener(e -> logout());
     }
     
