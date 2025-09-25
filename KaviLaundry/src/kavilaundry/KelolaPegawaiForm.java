@@ -15,13 +15,15 @@ public class KelolaPegawaiForm extends JFrame {
     private DefaultTableModel model;
     private JTextField txtUsername, txtPassword, txtNamaLengkap, txtAlamat, txtNoTelepon;
     private JComboBox<String> cmbRole;
-    private JButton btnTambah, btnEdit, btnHapus, btnTutup;
+    private JButton btnTambah, btnEdit, btnHapus, btnTutup, btnBatal;
     private int selectedId = -1;
+    private boolean isEditMode = false; // Tambahkan flag untuk mode edit
     
     public KelolaPegawaiForm() {
         initComponents();
         loadData();
         setLocationRelativeTo(null);
+        setEditMode(false); // Set mode awal ke tambah
     }
     
     private void initComponents() {
@@ -81,16 +83,19 @@ public class KelolaPegawaiForm extends JFrame {
         btnTambah = new JButton("Tambah");
         btnEdit = new JButton("Edit");
         btnHapus = new JButton("Hapus");
+        btnBatal = new JButton("Batal"); // Tambah tombol batal
         btnTutup = new JButton("Tutup");
         
         btnTambah.addActionListener(e -> tambahPegawai());
         btnEdit.addActionListener(e -> editPegawai());
         btnHapus.addActionListener(e -> hapusPegawai());
+        btnBatal.addActionListener(e -> batalEdit()); // Handler untuk tombol batal
         btnTutup.addActionListener(e -> dispose());
         
         btnPanel.add(btnTambah);
         btnPanel.add(btnEdit);
         btnPanel.add(btnHapus);
+        btnPanel.add(btnBatal);
         btnPanel.add(btnTutup);
         
         gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 4;
@@ -120,6 +125,31 @@ public class KelolaPegawaiForm extends JFrame {
         
         add(formPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
+    }
+    
+    // Method untuk mengatur mode edit atau tambah
+    private void setEditMode(boolean editMode) {
+        isEditMode = editMode;
+        btnTambah.setEnabled(!editMode); // Disable tombol tambah saat mode edit
+        btnEdit.setEnabled(editMode);    // Enable tombol edit saat mode edit
+        btnHapus.setEnabled(editMode);   // Enable tombol hapus saat mode edit
+        btnBatal.setVisible(editMode);   // Show tombol batal saat mode edit
+        
+        // Update title border
+        if (editMode) {
+            ((JPanel) getContentPane().getComponent(0)).setBorder(
+                BorderFactory.createTitledBorder("Edit Data Pegawai"));
+        } else {
+            ((JPanel) getContentPane().getComponent(0)).setBorder(
+                BorderFactory.createTitledBorder("Data Pegawai"));
+        }
+    }
+    
+    // Method untuk membatalkan edit dan kembali ke mode tambah
+    private void batalEdit() {
+        clearForm();
+        setEditMode(false);
+        table.clearSelection(); // Clear selection di tabel
     }
     
     private void loadData() {
@@ -158,10 +188,18 @@ public class KelolaPegawaiForm extends JFrame {
             txtNoTelepon.setText((String) model.getValueAt(row, 4));
             cmbRole.setSelectedItem((String) model.getValueAt(row, 5));
             txtPassword.setText(""); // Clear password field for security
+            
+            setEditMode(true); // Set ke mode edit saat baris dipilih
         }
     }
     
     private void tambahPegawai() {
+        // Pastikan hanya bisa tambah jika tidak dalam mode edit
+        if (isEditMode) {
+            JOptionPane.showMessageDialog(this, "Sedang dalam mode edit! Klik Batal untuk menambah data baru.");
+            return;
+        }
+        
         String username = txtUsername.getText().trim();
         String password = txtPassword.getText().trim();
         String namaLengkap = txtNamaLengkap.getText().trim();
@@ -176,6 +214,18 @@ public class KelolaPegawaiForm extends JFrame {
         }
         
         try (Connection conn = DatabaseConnection.getConnection()) {
+            // Check if username already exists
+            String checkUserSql = "SELECT COUNT(*) FROM user WHERE username = ?";
+            PreparedStatement checkStmt = conn.prepareStatement(checkUserSql);
+            checkStmt.setString(1, username);
+            ResultSet checkRs = checkStmt.executeQuery();
+            checkRs.next();
+            
+            if (checkRs.getInt(1) > 0) {
+                JOptionPane.showMessageDialog(this, "Username sudah ada! Pilih username lain.");
+                return;
+            }
+            
             // Get role ID
             String getRoleIdSql = "SELECT id_role FROM role WHERE nama_role = ?";
             PreparedStatement getRoleStmt = conn.prepareStatement(getRoleIdSql);
@@ -228,6 +278,19 @@ public class KelolaPegawaiForm extends JFrame {
         }
         
         try (Connection conn = DatabaseConnection.getConnection()) {
+            // Check if username already exists (exclude current user)
+            String checkUserSql = "SELECT COUNT(*) FROM user WHERE username = ? AND id_user != ?";
+            PreparedStatement checkStmt = conn.prepareStatement(checkUserSql);
+            checkStmt.setString(1, username);
+            checkStmt.setInt(2, selectedId);
+            ResultSet checkRs = checkStmt.executeQuery();
+            checkRs.next();
+            
+            if (checkRs.getInt(1) > 0) {
+                JOptionPane.showMessageDialog(this, "Username sudah ada! Pilih username lain.");
+                return;
+            }
+            
             // Get role ID
             String getRoleIdSql = "SELECT id_role FROM role WHERE nama_role = ?";
             PreparedStatement getRoleStmt = conn.prepareStatement(getRoleIdSql);
@@ -270,6 +333,7 @@ public class KelolaPegawaiForm extends JFrame {
             pstmt.executeUpdate();
             JOptionPane.showMessageDialog(this, "Pegawai berhasil diupdate!");
             clearForm();
+            setEditMode(false); // Kembali ke mode tambah setelah edit
             loadData();
             
         } catch (SQLException e) {
@@ -295,6 +359,7 @@ public class KelolaPegawaiForm extends JFrame {
             pstmt.executeUpdate();
             JOptionPane.showMessageDialog(this, "Pegawai berhasil dihapus!");
             clearForm();
+            setEditMode(false); // Kembali ke mode tambah setelah hapus
             loadData();
             
         } catch (SQLException e) {
