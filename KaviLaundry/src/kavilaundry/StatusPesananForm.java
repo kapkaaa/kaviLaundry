@@ -39,7 +39,7 @@ public class StatusPesananForm extends JFrame {
         gbc.gridx = 0; gbc.gridy = 0;
         controlPanel.add(new JLabel("Status Pesanan:"), gbc);
         gbc.gridx = 1;
-        cmbStatus = new JComboBox<>(new String[]{"diterima", "dicuci", "dijemur", "setrika", "selesai"});
+        cmbStatus = new JComboBox<>(new String[]{"diterima", "dicuci", "dijemur", "setrika", "selesai", "diambil"});
         controlPanel.add(cmbStatus, gbc);
         gbc.gridx = 2;
         btnUpdateStatus = new JButton("Update Status");
@@ -258,10 +258,12 @@ public class StatusPesananForm extends JFrame {
                 metodeBaruString = metodeLama.replace(" - LUNAS", "");
             }
             
-            String sql = "UPDATE transaksi SET pembayaran = ? WHERE id_transaksi = ?";
+            String sql = "UPDATE transaksi SET pembayaran = ?, tanggal_transaksi = ? WHERE id_transaksi = ?";
             PreparedStatement pstmt = conn.prepareStatement(sql);
+            java.sql.Date tanggalBaru = new java.sql.Date(System.currentTimeMillis());
             pstmt.setString(1, metodeBaruString);
-            pstmt.setInt(2, idTransaksi);
+            pstmt.setDate(2, tanggalBaru);
+            pstmt.setInt(3, idTransaksi);
             
             pstmt.executeUpdate();
             
