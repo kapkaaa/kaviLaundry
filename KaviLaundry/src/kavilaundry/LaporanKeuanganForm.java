@@ -1,5 +1,5 @@
 /*
- * LaporanKeuanganForm.java - Updated dengan Metode Pembayaran dan Filter Pending
+ * LaporanKeuanganForm.java - Updated dengan Metode Pembayaran, Filter Pending, dan Validasi Tanggal
  */
 package kavilaundry;
 
@@ -10,7 +10,10 @@ import java.awt.event.*;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Calendar;
 import com.toedter.calendar.JDateChooser;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeEvent;
 
 public class LaporanKeuanganForm extends JFrame {
     private JDateChooser dateFrom, dateTo;
@@ -45,6 +48,21 @@ public class LaporanKeuanganForm extends JFrame {
         dateTo.setPreferredSize(new Dimension(120, 25));
         dateTo.setDate(new Date()); // Default hari ini
         filterPanel.add(dateTo);
+        
+        // Add property change listeners untuk validasi real-time
+        dateFrom.addPropertyChangeListener("date", new PropertyChangeListener() {
+            @Override
+            public void propertyChange(PropertyChangeEvent evt) {
+                validateDateRange();
+            }
+        });
+        
+        dateTo.addPropertyChangeListener("date", new PropertyChangeListener() {
+            @Override
+            public void propertyChange(PropertyChangeEvent evt) {
+                validateDateRange();
+            }
+        });
         
         btnFilter = new JButton("Filter");
         btnExport = new JButton("Export Excel");
@@ -124,6 +142,38 @@ public class LaporanKeuanganForm extends JFrame {
         add(scrollPane, BorderLayout.CENTER);
     }
     
+    private void validateDateRange() {
+        Date fromDate = dateFrom.getDate();
+        Date toDate = dateTo.getDate();
+        
+        if (fromDate != null && toDate != null) {
+            // Normalize dates untuk perbandingan (set ke midnight)
+            Calendar calFrom = Calendar.getInstance();
+            calFrom.setTime(fromDate);
+            calFrom.set(Calendar.HOUR_OF_DAY, 0);
+            calFrom.set(Calendar.MINUTE, 0);
+            calFrom.set(Calendar.SECOND, 0);
+            calFrom.set(Calendar.MILLISECOND, 0);
+            
+            Calendar calTo = Calendar.getInstance();
+            calTo.setTime(toDate);
+            calTo.set(Calendar.HOUR_OF_DAY, 0);
+            calTo.set(Calendar.MINUTE, 0);
+            calTo.set(Calendar.SECOND, 0);
+            calTo.set(Calendar.MILLISECOND, 0);
+            
+            // Jika tanggal "Sampai" lebih kecil dari "Dari", set minimum date
+            if (calTo.before(calFrom)) {
+                dateTo.setMinSelectableDate(calFrom.getTime());
+                // Auto-adjust ke tanggal "Dari"
+                dateTo.setDate(calFrom.getTime());
+            } else {
+                // Update minimum selectable date untuk dateTo
+                dateTo.setMinSelectableDate(calFrom.getTime());
+            }
+        }
+    }
+    
     private void loadData() {
         // Load data untuk hari ini
         loadDataByDateRange();
@@ -135,6 +185,29 @@ public class LaporanKeuanganForm extends JFrame {
         
         if (fromDate == null || toDate == null) {
             JOptionPane.showMessageDialog(this, "Pilih tanggal dari dan sampai!");
+            return;
+        }
+        
+        // Validasi: Tanggal "Sampai" tidak boleh lebih kecil dari "Dari"
+        Calendar calFrom = Calendar.getInstance();
+        calFrom.setTime(fromDate);
+        calFrom.set(Calendar.HOUR_OF_DAY, 0);
+        calFrom.set(Calendar.MINUTE, 0);
+        calFrom.set(Calendar.SECOND, 0);
+        calFrom.set(Calendar.MILLISECOND, 0);
+        
+        Calendar calTo = Calendar.getInstance();
+        calTo.setTime(toDate);
+        calTo.set(Calendar.HOUR_OF_DAY, 0);
+        calTo.set(Calendar.MINUTE, 0);
+        calTo.set(Calendar.SECOND, 0);
+        calTo.set(Calendar.MILLISECOND, 0);
+        
+        if (calTo.before(calFrom)) {
+            JOptionPane.showMessageDialog(this, 
+                "Tanggal 'Sampai' tidak boleh lebih kecil dari tanggal 'Dari'!", 
+                "Periode Tidak Valid", 
+                JOptionPane.WARNING_MESSAGE);
             return;
         }
         
@@ -221,6 +294,37 @@ public class LaporanKeuanganForm extends JFrame {
     }
     
     private void exportToExcel() {
+        // Validasi tanggal sebelum export
+        Date fromDate = dateFrom.getDate();
+        Date toDate = dateTo.getDate();
+        
+        if (fromDate == null || toDate == null) {
+            JOptionPane.showMessageDialog(this, "Pilih tanggal dari dan sampai terlebih dahulu!");
+            return;
+        }
+        
+        Calendar calFrom = Calendar.getInstance();
+        calFrom.setTime(fromDate);
+        calFrom.set(Calendar.HOUR_OF_DAY, 0);
+        calFrom.set(Calendar.MINUTE, 0);
+        calFrom.set(Calendar.SECOND, 0);
+        calFrom.set(Calendar.MILLISECOND, 0);
+        
+        Calendar calTo = Calendar.getInstance();
+        calTo.setTime(toDate);
+        calTo.set(Calendar.HOUR_OF_DAY, 0);
+        calTo.set(Calendar.MINUTE, 0);
+        calTo.set(Calendar.SECOND, 0);
+        calTo.set(Calendar.MILLISECOND, 0);
+        
+        if (calTo.before(calFrom)) {
+            JOptionPane.showMessageDialog(this, 
+                "Tanggal 'Sampai' tidak boleh lebih kecil dari tanggal 'Dari'!", 
+                "Periode Tidak Valid", 
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
         // Implementasi export ke CSV dengan data yang sudah difilter
         try {
             JFileChooser fileChooser = new JFileChooser();
