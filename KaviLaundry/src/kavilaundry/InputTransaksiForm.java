@@ -296,7 +296,10 @@ public class InputTransaksiForm extends JFrame {
             }
             
             PaketLayanan selectedPaket = paketList.get(selectedPaketIndex);
-            double berat = Double.parseDouble(txtBerat.getText().trim());
+            double berat = Double.parseDouble(
+                txtBerat.getText().trim().replace(",", ".")
+            );
+
             
             if (berat <= 0) {
                 JOptionPane.showMessageDialog(this, "Berat harus lebih dari 0!");
@@ -423,7 +426,10 @@ public class InputTransaksiForm extends JFrame {
             
             int selectedPaketIndex = cmbPaket.getSelectedIndex();
             PaketLayanan selectedPaket = paketList.get(selectedPaketIndex);
-            double berat = Double.parseDouble(txtBerat.getText().trim());
+            double berat = Double.parseDouble(
+                txtBerat.getText().trim().replace(",", ".")
+            );
+
             boolean voucherDigunakan = chkVoucherDigunakan.isSelected();
             String metodePembayaran = (String) cmbMetodePembayaran.getSelectedItem();
             String waktuBayar = (String) cmbWaktuBayar.getSelectedItem();
