@@ -9,18 +9,21 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
+import javax.swing.text.*;
 
 public class KelolaHargaForm extends JFrame {
     private JTable tablePaket;
     private DefaultTableModel modelPaket;
     private JTextField txtNama, txtKapasitas, txtHarga, txtKeterangan;
-    private JButton btnTambah, btnEdit, btnHapus, btnTutup;
+    private JButton btnTambah, btnEdit, btnHapus, btnBatal, btnTutup;
     private int selectedId = -1;
+    private boolean isEditMode = false;
     
     public KelolaHargaForm() {
         initComponents();
         loadData();
         setLocationRelativeTo(null);
+        setEditMode(false); // Set mode awal ke tambah
     }
     
     private void initComponents() {
@@ -54,6 +57,7 @@ public class KelolaHargaForm extends JFrame {
         formPanel.add(new JLabel("Harga:"), gbc);
         gbc.gridx = 1;
         txtHarga = new JTextField(20);
+        ((AbstractDocument) txtHarga.getDocument()).setDocumentFilter(new NumberOnlyFilter());
         formPanel.add(txtHarga, gbc);
         
         // Keterangan
@@ -68,16 +72,19 @@ public class KelolaHargaForm extends JFrame {
         btnTambah = new JButton("Tambah");
         btnEdit = new JButton("Edit");
         btnHapus = new JButton("Hapus");
+        btnBatal = new JButton("Batal"); // Tambah tombol batal
         btnTutup = new JButton("Tutup");
         
         btnTambah.addActionListener(e -> tambahPaket());
         btnEdit.addActionListener(e -> editPaket());
         btnHapus.addActionListener(e -> hapusPaket());
+        btnBatal.addActionListener(e -> batalEdit()); // Handler untuk tombol batal
         btnTutup.addActionListener(e -> dispose());
         
         btnPanel.add(btnTambah);
         btnPanel.add(btnEdit);
         btnPanel.add(btnHapus);
+        btnPanel.add(btnBatal);
         btnPanel.add(btnTutup);
         
         gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2;
@@ -98,6 +105,48 @@ public class KelolaHargaForm extends JFrame {
         
         add(formPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
+    }
+    
+    private void setEditMode(boolean editMode) {
+        isEditMode = editMode;
+        btnTambah.setEnabled(!editMode); // Disable tombol tambah saat mode edit
+        btnEdit.setEnabled(editMode);    // Enable tombol edit saat mode edit
+        btnHapus.setEnabled(editMode);   // Enable tombol hapus saat mode edit
+        btnBatal.setVisible(editMode);   // Show tombol batal saat mode edit
+        
+        // Update title border
+        if (editMode) {
+            ((JPanel) getContentPane().getComponent(0)).setBorder(
+                BorderFactory.createTitledBorder("Edit Data Pegawai"));
+        } else {
+            ((JPanel) getContentPane().getComponent(0)).setBorder(
+                BorderFactory.createTitledBorder("Data Pegawai"));
+        }
+    }
+    
+    // Method untuk membatalkan edit dan kembali ke mode tambah
+    private void batalEdit() {
+        clearForm();
+        setEditMode(false);
+        tablePaket.clearSelection(); // Clear selection di tabel
+    }
+    
+    // Filter angka saja
+    class NumberOnlyFilter extends DocumentFilter {
+        @Override
+        public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr) 
+                throws BadLocationException {
+            if (string.matches("\\d+")) {
+                super.insertString(fb, offset, string, attr);
+            }
+        }
+        @Override
+        public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs) 
+                throws BadLocationException {
+            if (text.matches("\\d+")) {
+                super.replace(fb, offset, length, text, attrs);
+            }
+        }
     }
     
     private void loadData() {
@@ -134,10 +183,17 @@ public class KelolaHargaForm extends JFrame {
             txtHarga.setText(hargaStr);
             
             txtKeterangan.setText((String) modelPaket.getValueAt(row, 4));
+            
+            setEditMode(true); // Set ke mode edit saat baris dipilih
         }
     }
     
     private void tambahPaket() {
+        if (isEditMode) {
+            JOptionPane.showMessageDialog(this, "Sedang dalam mode edit! Klik Batal untuk menambah data baru.");
+            return;
+        }
+        
         String nama = txtNama.getText().trim();
         String kapasitas = txtKapasitas.getText().trim();
         String hargaStr = txtHarga.getText().trim();
@@ -211,6 +267,7 @@ public class KelolaHargaForm extends JFrame {
                 pstmt.executeUpdate();
                 JOptionPane.showMessageDialog(this, "Paket berhasil diupdate!");
                 clearForm();
+                setEditMode(false);
                 loadData();
                 
             } catch (SQLException e) {
@@ -239,6 +296,7 @@ public class KelolaHargaForm extends JFrame {
             pstmt.executeUpdate();
             JOptionPane.showMessageDialog(this, "Paket berhasil dihapus!");
             clearForm();
+            setEditMode(false);
             loadData();
             
         } catch (SQLException e) {
@@ -249,7 +307,7 @@ public class KelolaHargaForm extends JFrame {
     private void clearForm() {
         txtNama.setText("");
         txtKapasitas.setText("");
-        txtHarga.setText("");
+        txtHarga.setText("0");
         txtKeterangan.setText("");
         selectedId = -1;
         tablePaket.clearSelection();
