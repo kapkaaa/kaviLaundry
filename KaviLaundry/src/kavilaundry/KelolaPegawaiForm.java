@@ -9,6 +9,7 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
+import javax.swing.text.*;
 
 public class KelolaPegawaiForm extends JFrame {
     private JTable table;
@@ -70,6 +71,7 @@ public class KelolaPegawaiForm extends JFrame {
         formPanel.add(new JLabel("No. Telepon:"), gbc);
         gbc.gridx = 1;
         txtNoTelepon = new JTextField(15);
+        ((AbstractDocument) txtNoTelepon.getDocument()).setDocumentFilter(new NumberOnlyFilter());
         formPanel.add(txtNoTelepon, gbc);
         
         gbc.gridx = 2; gbc.gridy = 2;
@@ -125,6 +127,24 @@ public class KelolaPegawaiForm extends JFrame {
         
         add(formPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
+    }
+    
+    // Filter angka saja
+    class NumberOnlyFilter extends DocumentFilter {
+        @Override
+        public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr) 
+                throws BadLocationException {
+            if (string.matches("\\d+")) {
+                super.insertString(fb, offset, string, attr);
+            }
+        }
+        @Override
+        public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attrs) 
+                throws BadLocationException {
+            if (text.matches("\\d+")) {
+                super.replace(fb, offset, length, text, attrs);
+            }
+        }
     }
     
     // Method untuk mengatur mode edit atau tambah
@@ -372,7 +392,7 @@ public class KelolaPegawaiForm extends JFrame {
         txtPassword.setText("");
         txtNamaLengkap.setText("");
         txtAlamat.setText("");
-        txtNoTelepon.setText("");
+        txtNoTelepon.setText("0");
         cmbRole.setSelectedIndex(0);
         selectedId = -1;
     }
