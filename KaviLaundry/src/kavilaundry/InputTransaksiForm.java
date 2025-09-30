@@ -1,5 +1,5 @@
 /*
- * InputTransaksiForm.java - Updated dengan logika per KG dan Payment Method
+ * InputTransaksiForm.java - Updated dengan logika per KG, Payment Method, dan Tanggal Ambil
  */
 package kavilaundry;
 
@@ -9,6 +9,8 @@ import java.awt.event.*;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Calendar;
+import com.toedter.calendar.JDateChooser;
 
 public class InputTransaksiForm extends JFrame {
     private JTextField txtNamaPelanggan, txtBerat, txtid;
@@ -17,6 +19,7 @@ public class InputTransaksiForm extends JFrame {
     private JTextArea txtRincian;
     private JLabel lblTotal, lblVoucherInfo;
     private JButton btnHitung, btnSimpan, btnCetak, btnTutup;
+    private JDateChooser dateAmbil;
     
     private List<PaketLayanan> paketList = new ArrayList<>();
     private double totalBiaya = 0;
@@ -32,7 +35,7 @@ public class InputTransaksiForm extends JFrame {
     
     private void initComponents() {
         setTitle("Input Transaksi");
-        setSize(650, 650);
+        setSize(650, 700);
         setLayout(new BorderLayout());
         
         // Form Panel
@@ -64,7 +67,10 @@ public class InputTransaksiForm extends JFrame {
         formPanel.add(new JLabel("Paket Layanan:"), gbc);
         gbc.gridx = 1;
         cmbPaket = new JComboBox<>();
-        cmbPaket.addActionListener(e -> updateVoucherVisibility());
+        cmbPaket.addActionListener(e -> {
+            updateVoucherVisibility();
+            updateEstimasiTanggalAmbil();
+        });
         formPanel.add(cmbPaket, gbc);
         
         // Berat
@@ -75,8 +81,32 @@ public class InputTransaksiForm extends JFrame {
         txtBerat.setText("1");
         formPanel.add(txtBerat, gbc);
         
-        // Voucher dengan info
+        // Tanggal Ambil
         gbc.gridx = 0; gbc.gridy = 4;
+        formPanel.add(new JLabel("Tanggal Ambil:"), gbc);
+        gbc.gridx = 1;
+        dateAmbil = new JDateChooser();
+        dateAmbil.setDateFormatString("dd/MM/yyyy");
+        dateAmbil.setPreferredSize(new Dimension(200, 25));
+        
+        // Set minimum date ke besok (hari ini + 1)
+        Calendar minCal = Calendar.getInstance();
+        minCal.add(Calendar.DAY_OF_MONTH, 1);
+        minCal.set(Calendar.HOUR_OF_DAY, 0);
+        minCal.set(Calendar.MINUTE, 0);
+        minCal.set(Calendar.SECOND, 0);
+        minCal.set(Calendar.MILLISECOND, 0);
+        dateAmbil.setMinSelectableDate(minCal.getTime());
+        
+        // Set default ke 3 hari dari sekarang
+        Calendar defaultCal = Calendar.getInstance();
+        defaultCal.add(Calendar.DAY_OF_MONTH, 3);
+        dateAmbil.setDate(defaultCal.getTime());
+        
+        formPanel.add(dateAmbil, gbc);
+        
+        // Voucher dengan info
+        gbc.gridx = 0; gbc.gridy = 5;
         formPanel.add(new JLabel("Gunakan Voucher:"), gbc);
         gbc.gridx = 1;
         JPanel voucherPanel = new JPanel(new BorderLayout());
@@ -91,7 +121,7 @@ public class InputTransaksiForm extends JFrame {
         formPanel.add(voucherPanel, gbc);
         
         // Waktu Pembayaran
-        gbc.gridx = 0; gbc.gridy = 5;
+        gbc.gridx = 0; gbc.gridy = 6;
         formPanel.add(new JLabel("Waktu Pembayaran:"), gbc);
         gbc.gridx = 1;
         cmbWaktuBayar = new JComboBox<>(new String[]{"Bayar Sekarang", "Bayar Setelah Selesai"});
@@ -99,7 +129,7 @@ public class InputTransaksiForm extends JFrame {
         
         // Metode Pembayaran
         JLabel lblMetodePembayaran = new JLabel("Metode Pembayaran:");
-        gbc.gridx = 0; gbc.gridy = 6;
+        gbc.gridx = 0; gbc.gridy = 7;
         formPanel.add(lblMetodePembayaran, gbc);
         gbc.gridx = 1;
         cmbMetodePembayaran = new JComboBox<>(new String[]{"Cash", "QRIS"});
@@ -139,7 +169,7 @@ public class InputTransaksiForm extends JFrame {
         btnPanel.add(btnCetak);
         btnPanel.add(btnTutup);
         
-        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2;
+        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2;
         formPanel.add(btnPanel, gbc);
         
         // Rincian Panel
@@ -173,6 +203,37 @@ public class InputTransaksiForm extends JFrame {
                 updateVoucherInfo();
             }
         });
+    }
+    
+    private void updateEstimasiTanggalAmbil() {
+        if (cmbPaket.getSelectedIndex() < 0 || paketList.isEmpty()) {
+            return;
+        }
+        
+        PaketLayanan selectedPaket = paketList.get(cmbPaket.getSelectedIndex());
+        String kapasitas = selectedPaket.kapasitas.toLowerCase();
+        
+        Calendar cal = Calendar.getInstance();
+        
+        // Tentukan estimasi berdasarkan kapasitas paket
+        // Minimal besok (hari ini + 1)
+        if (kapasitas.contains("express") || kapasitas.contains("kilat")) {
+            cal.add(Calendar.DAY_OF_MONTH, 1); // besok
+        } else if (kapasitas.contains("reguler")) {
+            cal.add(Calendar.DAY_OF_MONTH, 3); // 3 hari dari sekarang
+        } else {
+            cal.add(Calendar.DAY_OF_MONTH, 3); // default 3 hari
+        }
+        
+        // Pastikan tidak kurang dari tanggal minimum (besok)
+        Calendar minCal = Calendar.getInstance();
+        minCal.add(Calendar.DAY_OF_MONTH, 1);
+        
+        if (cal.before(minCal)) {
+            cal = minCal;
+        }
+        
+        dateAmbil.setDate(cal.getTime());
     }
     
     private void generateNextTransactionId() {
@@ -274,6 +335,7 @@ public class InputTransaksiForm extends JFrame {
             if (cmbPaket.getItemCount() > 0) {
                 cmbPaket.setSelectedIndex(0);
                 updateVoucherVisibility();
+                updateEstimasiTanggalAmbil();
             }
             
         } catch (SQLException e) {
@@ -292,6 +354,33 @@ public class InputTransaksiForm extends JFrame {
             int selectedPaketIndex = cmbPaket.getSelectedIndex();
             if (selectedPaketIndex < 0) {
                 JOptionPane.showMessageDialog(this, "Pilih paket layanan!");
+                return;
+            }
+            
+            if (dateAmbil.getDate() == null) {
+                JOptionPane.showMessageDialog(this, "Tanggal ambil harus diisi!");
+                return;
+            }
+            
+            // Validasi tanggal ambil tidak boleh hari ini atau sebelumnya
+            Calendar today = Calendar.getInstance();
+            today.set(Calendar.HOUR_OF_DAY, 0);
+            today.set(Calendar.MINUTE, 0);
+            today.set(Calendar.SECOND, 0);
+            today.set(Calendar.MILLISECOND, 0);
+            
+            Calendar selectedDate = Calendar.getInstance();
+            selectedDate.setTime(dateAmbil.getDate());
+            selectedDate.set(Calendar.HOUR_OF_DAY, 0);
+            selectedDate.set(Calendar.MINUTE, 0);
+            selectedDate.set(Calendar.SECOND, 0);
+            selectedDate.set(Calendar.MILLISECOND, 0);
+            
+            if (!selectedDate.after(today)) {
+                JOptionPane.showMessageDialog(this, 
+                    "Tanggal ambil harus minimal besok!\nLaundry tidak bisa selesai di hari yang sama.", 
+                    "Tanggal Tidak Valid", 
+                    JOptionPane.WARNING_MESSAGE);
                 return;
             }
             
@@ -337,6 +426,10 @@ public class InputTransaksiForm extends JFrame {
             String metodePembayaran = (String) cmbMetodePembayaran.getSelectedItem();
             String waktuBayar = (String) cmbWaktuBayar.getSelectedItem();
             
+            // Format tanggal ambil
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd/MM/yyyy");
+            String tanggalAmbilStr = sdf.format(dateAmbil.getDate());
+            
             // Tampilkan rincian
             StringBuilder rincian = new StringBuilder();
             rincian.append("                  RINCIAN BIAYA                  \n");
@@ -345,6 +438,7 @@ public class InputTransaksiForm extends JFrame {
             rincian.append(String.format("Paket           : %s\n", selectedPaket.nama));
             rincian.append(String.format("Harga per kg    : Rp %,.0f\n", (double)selectedPaket.harga));
             rincian.append(String.format("Berat total     : %.1f kg\n", berat));
+            rincian.append(String.format("Tanggal Ambil   : %s\n", tanggalAmbilStr));
             rincian.append(String.format("Biaya normal    : Rp %,.0f\n", biayaDasar));
             
             if (voucherDigunakan) {
@@ -358,7 +452,7 @@ public class InputTransaksiForm extends JFrame {
             rincian.append("=================================================\n");
             rincian.append(String.format("TOTAL BAYAR     : Rp %,.0f\n", totalBiaya));
             rincian.append("=================================================\n");
-            if (waktuBayar == "Bayar Setelah Selesai") {
+            if (waktuBayar.equals("Bayar Setelah Selesai")) {
                 rincian.append(String.format("Waktu Bayar     : %s\n", waktuBayar));
             }  
             if (metodePembayaran != null && !metodePembayaran.isEmpty()) {
@@ -424,6 +518,33 @@ public class InputTransaksiForm extends JFrame {
                 return;
             }
             
+            if (dateAmbil.getDate() == null) {
+                JOptionPane.showMessageDialog(this, "Tanggal ambil harus diisi!");
+                return;
+            }
+            
+            // Validasi tanggal ambil tidak boleh hari ini atau sebelumnya
+            Calendar today = Calendar.getInstance();
+            today.set(Calendar.HOUR_OF_DAY, 0);
+            today.set(Calendar.MINUTE, 0);
+            today.set(Calendar.SECOND, 0);
+            today.set(Calendar.MILLISECOND, 0);
+            
+            Calendar selectedDate = Calendar.getInstance();
+            selectedDate.setTime(dateAmbil.getDate());
+            selectedDate.set(Calendar.HOUR_OF_DAY, 0);
+            selectedDate.set(Calendar.MINUTE, 0);
+            selectedDate.set(Calendar.SECOND, 0);
+            selectedDate.set(Calendar.MILLISECOND, 0);
+            
+            if (!selectedDate.after(today)) {
+                JOptionPane.showMessageDialog(this, 
+                    "Tanggal ambil harus minimal besok!\nLaundry tidak bisa selesai di hari yang sama.", 
+                    "Tanggal Tidak Valid", 
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
             int selectedPaketIndex = cmbPaket.getSelectedIndex();
             PaketLayanan selectedPaket = paketList.get(selectedPaketIndex);
             double berat = Double.parseDouble(
@@ -435,19 +556,21 @@ public class InputTransaksiForm extends JFrame {
             String waktuBayar = (String) cmbWaktuBayar.getSelectedItem();
             String value4;
             if (metodePembayaran == null || metodePembayaran.isEmpty()) {
-                value4 = waktuBayar; // kalau kosong, simpan hanya waktuBayar
+                value4 = waktuBayar;
             } else {
                 value4 = metodePembayaran + " - " + waktuBayar;
             }
-
+            
+            // Convert tanggal ambil ke SQL Date
+            java.sql.Date sqlDateAmbil = new java.sql.Date(dateAmbil.getDate().getTime());
             
             try (Connection conn = DatabaseConnection.getConnection()) {
                 conn.setAutoCommit(false);
                 
-                // Simpan transaksi
+                // Simpan transaksi dengan tanggal_ambil
                 String insertTransaksiSql = "INSERT INTO transaksi (id_pelanggan, id_jenis, berat_kg, " + 
-                                          "pembayaran, total_biaya, voucher_didapat, status_pesanan, id_user) " +
-                                          "VALUES (?, ?, ?, ?, ?, ?, 'diterima', ?)";
+                                          "pembayaran, total_biaya, voucher_didapat, status_pesanan, id_user, tanggal_ambil) " +
+                                          "VALUES (?, ?, ?, ?, ?, ?, 'diterima', ?, ?)";
                 
                 PreparedStatement pstmt = conn.prepareStatement(insertTransaksiSql, Statement.RETURN_GENERATED_KEYS);
                 pstmt.setInt(1, idPelanggan);
@@ -455,27 +578,25 @@ public class InputTransaksiForm extends JFrame {
                 pstmt.setDouble(3, berat);
                 pstmt.setString(4, value4);
                 pstmt.setDouble(5, totalBiaya);
-                pstmt.setInt(6, 1); // Setiap transaksi dapat 1 voucher
+                pstmt.setInt(6, 1);
                 pstmt.setInt(7, UserSession.getCurrentUserId());
+                pstmt.setDate(8, sqlDateAmbil);
                 
                 pstmt.executeUpdate();
                 ResultSet generatedKeys = pstmt.getGeneratedKeys();
                 int actualIdTransaksi = 0;
                 if (generatedKeys.next()) {
                     actualIdTransaksi = generatedKeys.getInt(1);
-                    // Update field txtid dengan ID yang sebenarnya dari database
                     txtid.setText(String.valueOf(actualIdTransaksi));
                 }
                 
                 if (voucherDigunakan) {
-                    // Jika voucher digunakan, kurangi 7 poin
                     String updateVoucherSql = "UPDATE pelanggan SET total_voucher = total_voucher - 7 WHERE id_pelanggan = ?";
                     try (PreparedStatement updateVoucherStmt = conn.prepareStatement(updateVoucherSql)) {
                         updateVoucherStmt.setInt(1, idPelanggan);
                         updateVoucherStmt.executeUpdate();
                     }
                 } else {
-                    // Jika tidak pakai voucher, tambah 1 poin
                     String updateVoucherSql = "UPDATE pelanggan SET total_voucher = total_voucher + 1 WHERE id_pelanggan = ?";
                     try (PreparedStatement updateVoucherStmt = conn.prepareStatement(updateVoucherSql)) {
                         updateVoucherStmt.setInt(1, idPelanggan);
@@ -504,6 +625,7 @@ public class InputTransaksiForm extends JFrame {
         if (cmbPaket.getItemCount() > 0) {
             cmbPaket.setSelectedIndex(0);
             updateVoucherVisibility();
+            updateEstimasiTanggalAmbil();
         }
         txtBerat.setText("1");
         chkVoucherDigunakan.setSelected(false);
@@ -517,6 +639,7 @@ public class InputTransaksiForm extends JFrame {
         if (cmbPaket.getItemCount() > 0) {
             cmbPaket.setSelectedIndex(0);
             updateVoucherVisibility();
+            updateEstimasiTanggalAmbil();
         }
         txtBerat.setText("1");
         chkVoucherDigunakan.setSelected(false);
