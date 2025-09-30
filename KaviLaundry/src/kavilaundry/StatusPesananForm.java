@@ -1,10 +1,11 @@
 /*
- * StatusPesananForm.java - Enhanced dengan Status Pembayaran
+ * StatusPesananForm.java - Enhanced dengan Search & Update Gabungan
  */
 package kavilaundry;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
@@ -14,7 +15,9 @@ public class StatusPesananForm extends JFrame {
     private JTable table;
     private DefaultTableModel model;
     private JComboBox<String> cmbStatus, cmbStatusBayar;
-    private JButton btnUpdateStatus, btnUpdateBayar, btnRefresh, btnTutup, btnDetail;
+    private JButton btnUpdate, btnRefresh, btnTutup, btnDetail, btnClearSearch;
+    private JTextField txtSearch;
+    private TableRowSorter<DefaultTableModel> sorter;
     
     public StatusPesananForm() {
         initComponents();
@@ -24,66 +27,116 @@ public class StatusPesananForm extends JFrame {
     
     private void initComponents() {
         setTitle("Status Pesanan & Pembayaran");
-        setSize(1000, 500);
-        setLayout(new BorderLayout());
+        setSize(1100, 600);
+        setLayout(new BorderLayout(10, 10));
+        
+        // Panel utama dengan padding
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Panel Search di atas
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        searchPanel.setBorder(BorderFactory.createTitledBorder("Pencarian"));
+        
+        searchPanel.add(new JLabel("Cari (ID/Nama/Paket):"));
+        txtSearch = new JTextField(30);
+        searchPanel.add(txtSearch);
+        
+        btnClearSearch = new JButton("Clear");
+        searchPanel.add(btnClearSearch);
         
         // Panel kontrol
         JPanel controlPanel = new JPanel(new GridBagLayout());
-        controlPanel.setBorder(BorderFactory.createTitledBorder("Kontrol Status"));
+        controlPanel.setBorder(BorderFactory.createTitledBorder("Update Status & Pembayaran"));
         
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.insets = new Insets(8, 8, 8, 8);
         gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         
         // Status Pesanan
         gbc.gridx = 0; gbc.gridy = 0;
         controlPanel.add(new JLabel("Status Pesanan:"), gbc);
-        gbc.gridx = 1;
+        gbc.gridx = 1; gbc.gridwidth = 2;
         cmbStatus = new JComboBox<>(new String[]{"diterima", "dicuci", "dijemur", "setrika", "selesai", "diambil"});
+        cmbStatus.setPreferredSize(new Dimension(200, 25));
         controlPanel.add(cmbStatus, gbc);
-        gbc.gridx = 2;
-        btnUpdateStatus = new JButton("Update Status");
-        controlPanel.add(btnUpdateStatus, gbc);
         
         // Status Pembayaran
-        gbc.gridx = 0; gbc.gridy = 1;
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1;
         controlPanel.add(new JLabel("Status Bayar:"), gbc);
-        gbc.gridx = 1;
+        gbc.gridx = 1; gbc.gridwidth = 2;
         cmbStatusBayar = new JComboBox<>(new String[]{"Belum Bayar", "Lunas"});
+        cmbStatusBayar.setPreferredSize(new Dimension(200, 25));
         controlPanel.add(cmbStatusBayar, gbc);
-        gbc.gridx = 2;
-        btnUpdateBayar = new JButton("Update Pembayaran");
-        controlPanel.add(btnUpdateBayar, gbc);
         
-        // Action buttons
-        gbc.gridx = 0; gbc.gridy = 2;
-        btnDetail = new JButton("Detail");
-        controlPanel.add(btnDetail, gbc);
+        // Buttons
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
+        btnUpdate = new JButton("💾 Update Semua");
+        btnUpdate.setPreferredSize(new Dimension(150, 30));
+        btnUpdate.setBackground(new Color(46, 204, 113));
+//        btnUpdate.setForeground(Color.WHITE);
+        btnUpdate.setFocusPainted(false);
+        controlPanel.add(btnUpdate, gbc);
+        
         gbc.gridx = 1;
-        btnRefresh = new JButton("Refresh");
-        controlPanel.add(btnRefresh, gbc);
+        btnDetail = new JButton("📄 Detail");
+        btnDetail.setPreferredSize(new Dimension(100, 30));
+        controlPanel.add(btnDetail, gbc);
+        
         gbc.gridx = 2;
-        btnTutup = new JButton("Tutup");
+        btnRefresh = new JButton("🔄 Refresh");
+        btnRefresh.setPreferredSize(new Dimension(100, 30));
+        controlPanel.add(btnRefresh, gbc);
+        
+        gbc.gridx = 3;
+        btnTutup = new JButton("❌ Tutup");
+        btnTutup.setPreferredSize(new Dimension(100, 30));
+        btnTutup.setBackground(new Color(231, 76, 60));
+//        btnTutup.setForeground(Color.);
+        btnTutup.setFocusPainted(false);
         controlPanel.add(btnTutup, gbc);
         
         // Event listeners
-        btnUpdateStatus.addActionListener(e -> updateStatus());
-        btnUpdateBayar.addActionListener(e -> updateStatusBayar());
+        btnUpdate.addActionListener(e -> updateSemuaStatus());
         btnDetail.addActionListener(e -> showDetail());
         btnRefresh.addActionListener(e -> loadData());
         btnTutup.addActionListener(e -> dispose());
+        btnClearSearch.addActionListener(e -> clearSearch());
+        
+        // Search listener dengan delay
+        txtSearch.addKeyListener(new KeyAdapter() {
+            private Timer timer;
+            
+            @Override
+            public void keyReleased(KeyEvent e) {
+                if (timer != null) {
+                    timer.stop();
+                }
+                timer = new Timer(300, evt -> filterTable());
+                timer.setRepeats(false);
+                timer.start();
+            }
+        });
         
         // Table dengan kolom tambahan untuk status pembayaran
         String[] columns = {"ID", "Tanggal", "Pelanggan", "Paket", "Berat", "Status Pesanan", "Status Bayar", "Metode & Waktu", "Total"};
         model = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // Make table non-editable
+                return false;
             }
         };
         
         table = new JTable(model);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setRowHeight(25);
+        table.setFont(new Font("Arial", Font.PLAIN, 12));
+        table.getTableHeader().setFont(new Font("Arial", Font.BOLD, 12));
+        
+        // Setup sorter untuk search
+        sorter = new TableRowSorter<>(model);
+        table.setRowSorter(sorter);
         
         // Set column widths
         table.getColumnModel().getColumn(0).setPreferredWidth(50);  // ID
@@ -104,9 +157,51 @@ public class StatusPesananForm extends JFrame {
         });
         
         JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.setBorder(BorderFactory.createTitledBorder("Daftar Pesanan"));
         
-        add(controlPanel, BorderLayout.NORTH);
-        add(scrollPane, BorderLayout.CENTER);
+        // Gabungkan panels
+        JPanel topPanel = new JPanel(new BorderLayout(5, 5));
+        topPanel.add(searchPanel, BorderLayout.NORTH);
+        topPanel.add(controlPanel, BorderLayout.CENTER);
+        
+        mainPanel.add(topPanel, BorderLayout.NORTH);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+        
+        add(mainPanel);
+    }
+    
+    private void filterTable() {
+        String searchText = txtSearch.getText().trim();
+        
+        if (searchText.isEmpty()) {
+            sorter.setRowFilter(null);
+        } else {
+            // Search di kolom ID, Pelanggan, dan Paket (kolom 0, 2, 3)
+            RowFilter<DefaultTableModel, Object> rf = RowFilter.orFilter(
+                java.util.Arrays.asList(
+                    RowFilter.regexFilter("(?i)" + searchText, 0), // ID
+                    RowFilter.regexFilter("(?i)" + searchText, 2), // Pelanggan
+                    RowFilter.regexFilter("(?i)" + searchText, 3)  // Paket
+                )
+            );
+            sorter.setRowFilter(rf);
+        }
+        
+        // Update label info
+        int visibleRows = table.getRowCount();
+        int totalRows = model.getRowCount();
+        
+        if (visibleRows != totalRows) {
+            setTitle(String.format("Status Pesanan & Pembayaran - Menampilkan %d dari %d data", visibleRows, totalRows));
+        } else {
+            setTitle("Status Pesanan & Pembayaran");
+        }
+    }
+    
+    private void clearSearch() {
+        txtSearch.setText("");
+        sorter.setRowFilter(null);
+        setTitle("Status Pesanan & Pembayaran");
     }
     
     private void loadData() {
@@ -124,7 +219,7 @@ public class StatusPesananForm extends JFrame {
                         "FROM transaksi t " +
                         "LEFT JOIN pelanggan p ON t.id_pelanggan = p.id_pelanggan " +
                         "LEFT JOIN paket pk ON t.id_jenis = pk.id " +
-                        "WHERE t.status_pesanan != 'selesai' OR " +
+                        "WHERE t.status_pesanan != 'diambil' OR " +
                         "      (t.status_pesanan = 'selesai' AND t.pembayaran LIKE '%Bayar Setelah Selesai%' AND " +
                         "       t.pembayaran NOT LIKE '%LUNAS%') " +
                         "ORDER BY t.tanggal_transaksi DESC";
@@ -155,6 +250,9 @@ public class StatusPesananForm extends JFrame {
                 };
                 model.addRow(row);
             }
+            
+            setTitle(String.format("Status Pesanan & Pembayaran - Total: %d data", model.getRowCount()));
+            
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading data: " + e.getMessage());
         }
@@ -176,7 +274,7 @@ public class StatusPesananForm extends JFrame {
         }
     }
     
-    private void updateStatus() {
+    private void updateSemuaStatus() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow < 0) {
             JOptionPane.showMessageDialog(this, "Pilih pesanan untuk mengubah status!");
@@ -184,51 +282,43 @@ public class StatusPesananForm extends JFrame {
         }
         
         int idTransaksi = (Integer) model.getValueAt(selectedRow, 0);
-        String statusBaru = (String) cmbStatus.getSelectedItem();
-        String statusLama = (String) model.getValueAt(selectedRow, 5);
-        
-        if (statusLama.equals(statusBaru)) {
-            JOptionPane.showMessageDialog(this, "Status sudah sama, tidak ada perubahan!");
-            return;
-        }
-        
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            String sql = "UPDATE transaksi SET status_pesanan = ? WHERE id_transaksi = ?";
-            PreparedStatement pstmt = conn.prepareStatement(sql);
-            pstmt.setString(1, statusBaru);
-            pstmt.setInt(2, idTransaksi);
-            
-            pstmt.executeUpdate();
-            JOptionPane.showMessageDialog(this, "Status pesanan berhasil diupdate dari '" + statusLama + "' ke '" + statusBaru + "'!");
-            loadData();
-            
-        } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error updating status: " + e.getMessage());
-        }
-    }
-    
-    private void updateStatusBayar() {
-        int selectedRow = table.getSelectedRow();
-        if (selectedRow < 0) {
-            JOptionPane.showMessageDialog(this, "Pilih pesanan untuk mengubah status pembayaran!");
-            return;
-        }
-        
-        int idTransaksi = (Integer) model.getValueAt(selectedRow, 0);
+        String statusPesananBaru = (String) cmbStatus.getSelectedItem();
+        String statusPesananLama = (String) model.getValueAt(selectedRow, 5);
         String statusBayarBaru = (String) cmbStatusBayar.getSelectedItem();
         String statusBayarLama = (String) model.getValueAt(selectedRow, 6);
         String metodeLama = (String) model.getValueAt(selectedRow, 7);
         
-        if (statusBayarLama.equals(statusBayarBaru)) {
-            JOptionPane.showMessageDialog(this, "Status pembayaran sudah sama, tidak ada perubahan!");
+        boolean statusPesananBerubah = !statusPesananLama.equals(statusPesananBaru);
+        boolean statusBayarBerubah = !statusBayarLama.equals(statusBayarBaru);
+        
+        if (!statusPesananBerubah && !statusBayarBerubah) {
+            JOptionPane.showMessageDialog(this, "Tidak ada perubahan status!");
+            return;
+        }
+        
+        // Konfirmasi
+        StringBuilder confirmMsg = new StringBuilder("Konfirmasi perubahan:\n\n");
+        if (statusPesananBerubah) {
+            confirmMsg.append(String.format("Status Pesanan: %s → %s\n", statusPesananLama, statusPesananBaru));
+        }
+        if (statusBayarBerubah) {
+            confirmMsg.append(String.format("Status Bayar: %s → %s\n", statusBayarLama, statusBayarBaru));
+        }
+        confirmMsg.append("\nLanjutkan?");
+        
+        int confirm = JOptionPane.showConfirmDialog(this, confirmMsg.toString(), 
+                                                     "Konfirmasi Update", 
+                                                     JOptionPane.YES_NO_OPTION);
+        
+        if (confirm != JOptionPane.YES_OPTION) {
             return;
         }
         
         try (Connection conn = DatabaseConnection.getConnection()) {
             String metodeBaruString = metodeLama;
             
-            if (statusBayarBaru.equals("Lunas")) {
-                // Tambahkan flag LUNAS ke pembayaran
+            // Update status pembayaran jika berubah
+            if (statusBayarBerubah && statusBayarBaru.equals("Lunas")) {
                 if (!metodeLama.contains("LUNAS")) {
                     metodeBaruString = metodeLama + " - LUNAS";
                 }
@@ -253,29 +343,33 @@ public class StatusPesananForm extends JFrame {
                         return; // User cancelled
                     }
                 }
-            } else {
-                // Hapus flag LUNAS
+            } else if (statusBayarBerubah && statusBayarBaru.equals("Belum Bayar")) {
                 metodeBaruString = metodeLama.replace(" - LUNAS", "");
             }
             
-            String sql = "UPDATE transaksi SET pembayaran = ?, tanggal_transaksi = ? WHERE id_transaksi = ?";
+            // Update ke database
+            String sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ? WHERE id_transaksi = ?";
             PreparedStatement pstmt = conn.prepareStatement(sql);
-            java.sql.Date tanggalBaru = new java.sql.Date(System.currentTimeMillis());
-            pstmt.setString(1, metodeBaruString);
-            pstmt.setDate(2, tanggalBaru);
+            pstmt.setString(1, statusPesananBaru);
+            pstmt.setString(2, metodeBaruString);
             pstmt.setInt(3, idTransaksi);
             
             pstmt.executeUpdate();
             
-            String message = "Status pembayaran berhasil diupdate!\n" +
-                           "Dari: " + statusBayarLama + "\n" +
-                           "Ke: " + statusBayarBaru;
+            StringBuilder successMsg = new StringBuilder("Update berhasil!\n\n");
+            if (statusPesananBerubah) {
+                successMsg.append(String.format("✓ Status Pesanan: %s → %s\n", statusPesananLama, statusPesananBaru));
+            }
+            if (statusBayarBerubah) {
+                successMsg.append(String.format("✓ Status Bayar: %s → %s\n", statusBayarLama, statusBayarBaru));
+            }
             
-            JOptionPane.showMessageDialog(this, message);
+            JOptionPane.showMessageDialog(this, successMsg.toString(), "Sukses", JOptionPane.INFORMATION_MESSAGE);
             loadData();
             
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error updating payment status: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Error updating status: " + e.getMessage(), 
+                                        "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
     
@@ -286,7 +380,9 @@ public class StatusPesananForm extends JFrame {
             return;
         }
         
-        int idTransaksi = (Integer) model.getValueAt(selectedRow, 0);
+        // Get actual row index from filtered table
+        int actualRow = table.convertRowIndexToModel(selectedRow);
+        int idTransaksi = (Integer) model.getValueAt(actualRow, 0);
         
         // Create detail dialog
         JDialog detailDialog = new JDialog(this, "Detail Transaksi", true);
@@ -296,6 +392,7 @@ public class StatusPesananForm extends JFrame {
         JTextArea txtDetail = new JTextArea();
         txtDetail.setEditable(false);
         txtDetail.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        txtDetail.setMargin(new Insets(10, 10, 10, 10));
         
         try (Connection conn = DatabaseConnection.getConnection()) {
             String sql = "SELECT t.*, p.nama as nama_pelanggan, pk.nama as paket_nama, u.username " +
@@ -313,8 +410,9 @@ public class StatusPesananForm extends JFrame {
                 SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
                 StringBuilder detail = new StringBuilder();
                 
-                detail.append("DETAIL TRANSAKSI\n");
-                detail.append("=====================================\n");
+                detail.append("╔═══════════════════════════════════════════╗\n");
+                detail.append("║          DETAIL TRANSAKSI                 ║\n");
+                detail.append("╚═══════════════════════════════════════════╝\n\n");
                 detail.append(String.format("ID Transaksi : %d\n", rs.getInt("id_transaksi")));
                 detail.append(String.format("Tanggal      : %s\n", sdf.format(rs.getTimestamp("tanggal_transaksi"))));
                 detail.append(String.format("Pelanggan    : %s\n", rs.getString("nama_pelanggan")));
