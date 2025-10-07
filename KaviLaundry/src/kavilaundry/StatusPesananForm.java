@@ -1,5 +1,5 @@
 /*
- * StatusPesananForm.java - Enhanced dengan Search & Update Gabungan
+ * StatusPesananForm.java - Enhanced dengan Search, Update, Checkbox & Validasi
  */
 package kavilaundry;
 
@@ -17,6 +17,7 @@ public class StatusPesananForm extends JFrame {
     private JComboBox<String> cmbStatus, cmbStatusBayar;
     private JButton btnUpdate, btnRefresh, btnTutup, btnDetail, btnClearSearch;
     private JTextField txtSearch;
+    private JCheckBox chkUpdateTanggal;
     private TableRowSorter<DefaultTableModel> sorter;
     
     public StatusPesananForm() {
@@ -70,12 +71,18 @@ public class StatusPesananForm extends JFrame {
         cmbStatusBayar.setPreferredSize(new Dimension(200, 25));
         controlPanel.add(cmbStatusBayar, gbc);
         
+        // Checkbox Update Tanggal
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 3;
+        chkUpdateTanggal = new JCheckBox("Update tanggal ke waktu sekarang", false);
+        chkUpdateTanggal.setFont(new Font("Arial", Font.PLAIN, 11));
+        chkUpdateTanggal.setToolTipText("Centang jika ingin mengubah tanggal transaksi ke waktu sekarang");
+        controlPanel.add(chkUpdateTanggal, gbc);
+        
         // Buttons
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1;
         btnUpdate = new JButton("💾 Update Semua");
         btnUpdate.setPreferredSize(new Dimension(150, 30));
         btnUpdate.setBackground(new Color(46, 204, 113));
-//        btnUpdate.setForeground(Color.WHITE);
         btnUpdate.setFocusPainted(false);
         controlPanel.add(btnUpdate, gbc);
         
@@ -93,7 +100,6 @@ public class StatusPesananForm extends JFrame {
         btnTutup = new JButton("❌ Tutup");
         btnTutup.setPreferredSize(new Dimension(100, 30));
         btnTutup.setBackground(new Color(231, 76, 60));
-//        btnTutup.setForeground(Color.);
         btnTutup.setFocusPainted(false);
         controlPanel.add(btnTutup, gbc);
         
@@ -222,7 +228,7 @@ public class StatusPesananForm extends JFrame {
                         "WHERE t.status_pesanan != 'diambil' OR " +
                         "      (t.status_pesanan = 'selesai' AND t.pembayaran LIKE '%Bayar Setelah Selesai%' AND " +
                         "       t.pembayaran NOT LIKE '%LUNAS%') " +
-                        "ORDER BY t.tanggal_transaksi DESC";
+                        "ORDER BY t.id_transaksi DESC";
             
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery(sql);
@@ -266,10 +272,21 @@ public class StatusPesananForm extends JFrame {
             
             cmbStatus.setSelectedItem(statusPesanan);
             
+            // Set status bayar di combobox
             if (statusBayar.equals("Lunas")) {
                 cmbStatusBayar.setSelectedIndex(1);
+                // VALIDASI: Jika sudah lunas, combobox jadi readonly
+                cmbStatusBayar.setEnabled(false);
+                cmbStatusBayar.setToolTipText("Pembayaran sudah lunas, tidak bisa diubah");
             } else {
-                cmbStatusBayar.setSelectedIndex(0);
+                if (statusBayar.equals("Belum Bayar")) {
+                    cmbStatusBayar.setSelectedIndex(0);
+                } else { // Pending
+                    cmbStatusBayar.setSelectedIndex(0);
+                }
+                // Belum lunas, masih bisa diubah
+                cmbStatusBayar.setEnabled(true);
+                cmbStatusBayar.setToolTipText(null);
             }
         }
     }
@@ -291,6 +308,15 @@ public class StatusPesananForm extends JFrame {
         boolean statusPesananBerubah = !statusPesananLama.equals(statusPesananBaru);
         boolean statusBayarBerubah = !statusBayarLama.equals(statusBayarBaru);
         
+        // Validasi: Cek apakah sudah lunas
+        if (statusBayarLama.equals("Lunas") && statusBayarBerubah) {
+            JOptionPane.showMessageDialog(this, 
+                "Pembayaran sudah lunas!\nTidak bisa mengubah status pembayaran.", 
+                "Validasi", 
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
         if (!statusPesananBerubah && !statusBayarBerubah) {
             JOptionPane.showMessageDialog(this, "Tidak ada perubahan status!");
             return;
@@ -303,6 +329,10 @@ public class StatusPesananForm extends JFrame {
         }
         if (statusBayarBerubah) {
             confirmMsg.append(String.format("Status Bayar: %s → %s\n", statusBayarLama, statusBayarBaru));
+        }
+        if (chkUpdateTanggal.isSelected()) {
+            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+            confirmMsg.append(String.format("⚠️ Tanggal akan diupdate ke: %s\n", sdf.format(new java.util.Date())));
         }
         confirmMsg.append("\nLanjutkan?");
         
@@ -324,7 +354,7 @@ public class StatusPesananForm extends JFrame {
                 }
                 
                 // Jika pembayaran ditunda dan sekarang dibayar, minta konfirmasi metode
-                if (metodeLama.contains("Bayar Setelah Selesai")) {
+                if (metodeLama.contains("Bayar Setelah Selesai") && !metodeLama.contains("LUNAS")) {
                     String[] options = {"Cash", "QRIS"};
                     int choice = JOptionPane.showOptionDialog(
                         this,
@@ -348,20 +378,39 @@ public class StatusPesananForm extends JFrame {
             }
             
             // Update ke database
-            String sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ? WHERE id_transaksi = ?";
-            PreparedStatement pstmt = conn.prepareStatement(sql);
-            pstmt.setString(1, statusPesananBaru);
-            pstmt.setString(2, metodeBaruString);
-            pstmt.setInt(3, idTransaksi);
+            String sql;
+            PreparedStatement pstmt;
+            
+            if (chkUpdateTanggal.isSelected()) {
+                // Update dengan tanggal baru
+                sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ?, tanggal_transaksi = NOW() WHERE id_transaksi = ?";
+                pstmt = conn.prepareStatement(sql);
+                pstmt.setString(1, statusPesananBaru);
+                pstmt.setString(2, metodeBaruString);
+                pstmt.setInt(3, idTransaksi);
+            } else {
+                // Update tanpa mengubah tanggal
+                sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ? WHERE id_transaksi = ?";
+                pstmt = conn.prepareStatement(sql);
+                pstmt.setString(1, statusPesananBaru);
+                pstmt.setString(2, metodeBaruString);
+                pstmt.setInt(3, idTransaksi);
+            }
             
             pstmt.executeUpdate();
             
-            StringBuilder successMsg = new StringBuilder("Update berhasil!\n\n");
+            StringBuilder successMsg = new StringBuilder("✅ Update berhasil!\n\n");
             if (statusPesananBerubah) {
                 successMsg.append(String.format("✓ Status Pesanan: %s → %s\n", statusPesananLama, statusPesananBaru));
             }
             if (statusBayarBerubah) {
                 successMsg.append(String.format("✓ Status Bayar: %s → %s\n", statusBayarLama, statusBayarBaru));
+            }
+            if (chkUpdateTanggal.isSelected()) {
+                SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+                successMsg.append(String.format("✓ Tanggal diupdate ke: %s\n", sdf.format(new java.util.Date())));
+            } else {
+                successMsg.append("✓ Tanggal tetap (tidak diubah)\n");
             }
             
             JOptionPane.showMessageDialog(this, successMsg.toString(), "Sukses", JOptionPane.INFORMATION_MESSAGE);
@@ -407,14 +456,14 @@ public class StatusPesananForm extends JFrame {
             ResultSet rs = pstmt.executeQuery();
             
             if (rs.next()) {
-                SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+                SimpleDateFormat sdfDetail = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
                 StringBuilder detail = new StringBuilder();
                 
                 detail.append("╔═══════════════════════════════════════════╗\n");
                 detail.append("║          DETAIL TRANSAKSI                 ║\n");
                 detail.append("╚═══════════════════════════════════════════╝\n\n");
                 detail.append(String.format("ID Transaksi : %d\n", rs.getInt("id_transaksi")));
-                detail.append(String.format("Tanggal      : %s\n", sdf.format(rs.getTimestamp("tanggal_transaksi"))));
+                detail.append(String.format("Tanggal      : %s\n", sdfDetail.format(rs.getTimestamp("tanggal_transaksi"))));
                 detail.append(String.format("Pelanggan    : %s\n", rs.getString("nama_pelanggan")));
                 detail.append(String.format("Paket        : %s\n", rs.getString("paket_nama")));
                 detail.append(String.format("Berat        : %.1f kg\n", rs.getDouble("berat_kg")));
