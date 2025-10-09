@@ -1,5 +1,5 @@
 /*
- * StatusPesananForm.java - Enhanced dengan Search, Update, Checkbox & Validasi
+ * StatusPesananForm.java - Enhanced dengan Auto Detect Update Tanggal
  */
 package kavilaundry;
 
@@ -10,6 +10,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
 import java.text.SimpleDateFormat;
+import java.util.regex.*;
 
 public class StatusPesananForm extends JFrame {
     private JTable table;
@@ -17,7 +18,6 @@ public class StatusPesananForm extends JFrame {
     private JComboBox<String> cmbStatus, cmbStatusBayar;
     private JButton btnUpdate, btnRefresh, btnTutup, btnDetail, btnClearSearch;
     private JTextField txtSearch;
-    private JCheckBox chkUpdateTanggal;
     private TableRowSorter<DefaultTableModel> sorter;
     
     public StatusPesananForm() {
@@ -71,16 +71,9 @@ public class StatusPesananForm extends JFrame {
         cmbStatusBayar.setPreferredSize(new Dimension(200, 25));
         controlPanel.add(cmbStatusBayar, gbc);
         
-        // Checkbox Update Tanggal
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 3;
-        chkUpdateTanggal = new JCheckBox("Update tanggal ke waktu sekarang", false);
-        chkUpdateTanggal.setFont(new Font("Arial", Font.PLAIN, 11));
-        chkUpdateTanggal.setToolTipText("Centang jika ingin mengubah tanggal transaksi ke waktu sekarang");
-        controlPanel.add(chkUpdateTanggal, gbc);
-        
         // Buttons
-        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1;
-        btnUpdate = new JButton("💾 Update Semua");
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
+        btnUpdate = new JButton("💾 Update");
         btnUpdate.setPreferredSize(new Dimension(150, 30));
         btnUpdate.setBackground(new Color(46, 204, 113));
         btnUpdate.setFocusPainted(false);
@@ -182,15 +175,20 @@ public class StatusPesananForm extends JFrame {
         if (searchText.isEmpty()) {
             sorter.setRowFilter(null);
         } else {
-            // Search di kolom ID, Pelanggan, dan Paket (kolom 0, 2, 3)
-            RowFilter<DefaultTableModel, Object> rf = RowFilter.orFilter(
-                java.util.Arrays.asList(
-                    RowFilter.regexFilter("(?i)" + searchText, 0), // ID
-                    RowFilter.regexFilter("(?i)" + searchText, 2), // Pelanggan
-                    RowFilter.regexFilter("(?i)" + searchText, 3)  // Paket
-                )
-            );
-            sorter.setRowFilter(rf);
+            try {
+                // Search di kolom ID, Pelanggan, dan Paket (kolom 0, 2, 3)
+                RowFilter<DefaultTableModel, Object> rf = RowFilter.orFilter(
+                    java.util.Arrays.asList(
+                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 0), // ID
+                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 2), // Pelanggan
+                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 3)  // Paket
+                    )
+                );
+                sorter.setRowFilter(rf);
+            } catch (java.util.regex.PatternSyntaxException e) {
+                // Jika ada error di regex, tampilkan semua data
+                sorter.setRowFilter(null);
+            }
         }
         
         // Update label info
@@ -228,7 +226,7 @@ public class StatusPesananForm extends JFrame {
                         "WHERE t.status_pesanan != 'diambil' OR " +
                         "      (t.status_pesanan = 'selesai' AND t.pembayaran LIKE '%Bayar Setelah Selesai%' AND " +
                         "       t.pembayaran NOT LIKE '%LUNAS%') " +
-                        "ORDER BY t.id_transaksi DESC";
+                        "ORDER BY t.tanggal_transaksi DESC";
             
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery(sql);
@@ -267,8 +265,11 @@ public class StatusPesananForm extends JFrame {
     private void updateComboBoxes() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow >= 0) {
-            String statusPesanan = (String) model.getValueAt(selectedRow, 5);
-            String statusBayar = (String) model.getValueAt(selectedRow, 6);
+            // Konversi dari view row index ke model row index (untuk filtered table)
+            int modelRow = table.convertRowIndexToModel(selectedRow);
+            
+            String statusPesanan = (String) model.getValueAt(modelRow, 5);
+            String statusBayar = (String) model.getValueAt(modelRow, 6);
             
             cmbStatus.setSelectedItem(statusPesanan);
             
@@ -298,12 +299,15 @@ public class StatusPesananForm extends JFrame {
             return;
         }
         
-        int idTransaksi = (Integer) model.getValueAt(selectedRow, 0);
+        // Konversi dari view row index ke model row index (untuk filtered table)
+        int modelRow = table.convertRowIndexToModel(selectedRow);
+        
+        int idTransaksi = (Integer) model.getValueAt(modelRow, 0);
         String statusPesananBaru = (String) cmbStatus.getSelectedItem();
-        String statusPesananLama = (String) model.getValueAt(selectedRow, 5);
+        String statusPesananLama = (String) model.getValueAt(modelRow, 5);
         String statusBayarBaru = (String) cmbStatusBayar.getSelectedItem();
-        String statusBayarLama = (String) model.getValueAt(selectedRow, 6);
-        String metodeLama = (String) model.getValueAt(selectedRow, 7);
+        String statusBayarLama = (String) model.getValueAt(modelRow, 6);
+        String metodeLama = (String) model.getValueAt(modelRow, 7);
         
         boolean statusPesananBerubah = !statusPesananLama.equals(statusPesananBaru);
         boolean statusBayarBerubah = !statusBayarLama.equals(statusBayarBaru);
@@ -322,6 +326,19 @@ public class StatusPesananForm extends JFrame {
             return;
         }
         
+        // LOGIKA AUTO DETECT: Apakah perlu update tanggal?
+        boolean updateTanggal = false;
+        String alasanUpdateTanggal = "";
+        
+        // Update tanggal HANYA jika status pembayaran berubah (Belum Bayar → Lunas)
+        if (statusBayarBerubah && statusBayarBaru.equals("Lunas")) {
+            updateTanggal = true;
+            alasanUpdateTanggal = "Pembayaran baru lunas";
+        }
+        // TIDAK update tanggal jika:
+        // - Sudah lunas dari awal (statusBayarLama = Lunas dan tidak berubah)
+        // - Hanya update status pesanan saja
+        
         // Konfirmasi
         StringBuilder confirmMsg = new StringBuilder("Konfirmasi perubahan:\n\n");
         if (statusPesananBerubah) {
@@ -330,10 +347,15 @@ public class StatusPesananForm extends JFrame {
         if (statusBayarBerubah) {
             confirmMsg.append(String.format("Status Bayar: %s → %s\n", statusBayarLama, statusBayarBaru));
         }
-        if (chkUpdateTanggal.isSelected()) {
+        
+        if (updateTanggal) {
             SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
-            confirmMsg.append(String.format("⚠️ Tanggal akan diupdate ke: %s\n", sdf.format(new java.util.Date())));
+            confirmMsg.append(String.format("\n⚠️ Tanggal akan diupdate ke: %s\n", sdf.format(new java.util.Date())));
+            confirmMsg.append(String.format("   Alasan: %s\n", alasanUpdateTanggal));
+        } else {
+            confirmMsg.append("\n✓ Tanggal tetap (tidak diubah)\n");
         }
+        
         confirmMsg.append("\nLanjutkan?");
         
         int confirm = JOptionPane.showConfirmDialog(this, confirmMsg.toString(), 
@@ -381,15 +403,15 @@ public class StatusPesananForm extends JFrame {
             String sql;
             PreparedStatement pstmt;
             
-            if (chkUpdateTanggal.isSelected()) {
-                // Update dengan tanggal baru
+            if (updateTanggal) {
+                // Update dengan tanggal baru (karena pembayaran baru lunas)
                 sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ?, tanggal_transaksi = NOW() WHERE id_transaksi = ?";
                 pstmt = conn.prepareStatement(sql);
                 pstmt.setString(1, statusPesananBaru);
                 pstmt.setString(2, metodeBaruString);
                 pstmt.setInt(3, idTransaksi);
             } else {
-                // Update tanpa mengubah tanggal
+                // Update tanpa mengubah tanggal (hanya update status pesanan atau sudah lunas dari awal)
                 sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ? WHERE id_transaksi = ?";
                 pstmt = conn.prepareStatement(sql);
                 pstmt.setString(1, statusPesananBaru);
@@ -406,9 +428,11 @@ public class StatusPesananForm extends JFrame {
             if (statusBayarBerubah) {
                 successMsg.append(String.format("✓ Status Bayar: %s → %s\n", statusBayarLama, statusBayarBaru));
             }
-            if (chkUpdateTanggal.isSelected()) {
+            
+            if (updateTanggal) {
                 SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
                 successMsg.append(String.format("✓ Tanggal diupdate ke: %s\n", sdf.format(new java.util.Date())));
+                successMsg.append(String.format("  (%s)\n", alasanUpdateTanggal));
             } else {
                 successMsg.append("✓ Tanggal tetap (tidak diubah)\n");
             }
