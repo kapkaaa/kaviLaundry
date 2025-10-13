@@ -1,11 +1,9 @@
-/*
- * InputTransaksiForm.java - Updated dengan logika per KG, Payment Method, dan Tanggal Ambil
- */
 package kavilaundry;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.geom.RoundRectangle2D;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,48 +23,118 @@ public class InputTransaksiForm extends JFrame {
     private double totalBiaya = 0;
     private int idPelanggan = 0;
     private int currentTransactionId = 0;
-    
+    private Point mousePoint;
+    private boolean isMaximized = false;
+    private Rectangle normalBounds;
+
     public InputTransaksiForm() {
+        setUndecorated(true);
         initComponents();
         loadPaketData();
         generateNextTransactionId();
         setLocationRelativeTo(null);
+        updateWindowShape();
     }
     
     private void initComponents() {
-        setTitle("Input Transaksi");
+        Color bgColor = Color.decode("#b3ebf2");
+        Color textMain = Color.decode("#222222");
+        Color buttonBg = Color.decode("#6da395");
+        Color cetakBg = Color.decode("#4A90E2");
+        Color tableBg = Color.WHITE;
+
         setSize(650, 700);
+        setBackground(new Color(0, 0, 0, 0));
         setLayout(new BorderLayout());
-        
-        // Form Panel
-        JPanel formPanel = new JPanel(new GridBagLayout());
-        formPanel.setBorder(BorderFactory.createTitledBorder("Data Transaksi"));
-        
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        // =================== PANEL UTAMA DENGAN ROUNDED BACKGROUND ===================
+        JPanel mainPanel = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(bgColor);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
+        mainPanel.setOpaque(false);
+
+        // =================== macOS TITLE BAR ===================
+        JPanel titleBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(bgColor);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
+        titleBar.setPreferredSize(new Dimension(650, 40));
+        titleBar.setOpaque(false);
+
+        JButton btnClose = createMacOSButton(new Color(0xFF5F57));
+        JButton btnMinimize = createMacOSButton(new Color(0xFFBD2E));
+        JButton btnMaximize = createMacOSButton(new Color(0x28CA42));
+
+        btnClose.addActionListener(e -> dispose());
+        btnMinimize.addActionListener(e -> setState(JFrame.ICONIFIED));
+        btnMaximize.addActionListener(e -> toggleMaximize());
+
+        titleBar.add(btnClose);
+        titleBar.add(btnMinimize);
+        titleBar.add(btnMaximize);
+
+        JLabel titleLabel = new JLabel("Input Transaksi", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        titleLabel.setForeground(textMain);
+        titleLabel.setOpaque(false);
+        titleBar.add(Box.createHorizontalGlue());
+        titleBar.add(titleLabel);
+        titleBar.add(Box.createHorizontalGlue());
+
+        mainPanel.add(titleBar, BorderLayout.NORTH);
+
+        // =================== FORM PANEL — TRANSPARAN ===================
+        JPanel formPanel = new JPanel(new GridBagLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+            }
+        };
+        formPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 10, 20));
+        formPanel.setOpaque(false);
+
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.insets = new Insets(8, 8, 8, 8);
         gbc.anchor = GridBagConstraints.WEST;
-        
+
         // ID Transaksi (readonly)
         gbc.gridx = 0; gbc.gridy = 0;
-        formPanel.add(new JLabel("ID Transaksi:"), gbc);
+        formPanel.add(createLabel("ID Transaksi:"), gbc);
         gbc.gridx = 1;
-        txtid = new JTextField(20);
+        txtid = createStyledTextField(20);
         txtid.setEditable(false);
         txtid.setBackground(Color.LIGHT_GRAY);
         formPanel.add(txtid, gbc);
         
         // Nama Pelanggan
         gbc.gridx = 0; gbc.gridy = 1;
-        formPanel.add(new JLabel("Nama Pelanggan:"), gbc);
+        formPanel.add(createLabel("Nama Pelanggan:"), gbc);
         gbc.gridx = 1;
-        txtNamaPelanggan = new JTextField(20);
+        txtNamaPelanggan = createStyledTextField(20);
         formPanel.add(txtNamaPelanggan, gbc);
         
         // Paket
         gbc.gridx = 0; gbc.gridy = 2;
-        formPanel.add(new JLabel("Paket Layanan:"), gbc);
+        formPanel.add(createLabel("Paket Layanan:"), gbc);
         gbc.gridx = 1;
         cmbPaket = new JComboBox<>();
+        styleComboBox(cmbPaket);
         cmbPaket.addActionListener(e -> {
             updateVoucherVisibility();
             updateEstimasiTanggalAmbil();
@@ -75,21 +143,21 @@ public class InputTransaksiForm extends JFrame {
         
         // Berat
         gbc.gridx = 0; gbc.gridy = 3;
-        formPanel.add(new JLabel("Berat (kg):"), gbc);
+        formPanel.add(createLabel("Berat (kg):"), gbc);
         gbc.gridx = 1;
-        txtBerat = new JTextField(20);
+        txtBerat = createStyledTextField(20);
         txtBerat.setText("1");
         formPanel.add(txtBerat, gbc);
         
         // Tanggal Ambil
         gbc.gridx = 0; gbc.gridy = 4;
-        formPanel.add(new JLabel("Tanggal Ambil:"), gbc);
+        formPanel.add(createLabel("Tanggal Ambil:"), gbc);
         gbc.gridx = 1;
         dateAmbil = new JDateChooser();
         dateAmbil.setDateFormatString("dd/MM/yyyy");
         dateAmbil.setPreferredSize(new Dimension(200, 25));
+        styleDateChooser(dateAmbil);
         
-        // Set minimum date ke besok (hari ini + 1)
         Calendar minCal = Calendar.getInstance();
         minCal.add(Calendar.DAY_OF_MONTH, 1);
         minCal.set(Calendar.HOUR_OF_DAY, 0);
@@ -98,7 +166,6 @@ public class InputTransaksiForm extends JFrame {
         minCal.set(Calendar.MILLISECOND, 0);
         dateAmbil.setMinSelectableDate(minCal.getTime());
         
-        // Set default ke 3 hari dari sekarang
         Calendar defaultCal = Calendar.getInstance();
         defaultCal.add(Calendar.DAY_OF_MONTH, 3);
         dateAmbil.setDate(defaultCal.getTime());
@@ -107,13 +174,27 @@ public class InputTransaksiForm extends JFrame {
         
         // Voucher dengan info
         gbc.gridx = 0; gbc.gridy = 5;
-        formPanel.add(new JLabel("Gunakan Voucher:"), gbc);
+        formPanel.add(createLabel("Gunakan Voucher:"), gbc);
         gbc.gridx = 1;
         JPanel voucherPanel = new JPanel(new BorderLayout());
-        chkVoucherDigunakan = new JCheckBox("Gunakan 7 Voucher (Gratis 7kg)");
+        voucherPanel.setOpaque(false);
+        
+        chkVoucherDigunakan = new JCheckBox("Gunakan 7 Voucher (Gratis 7kg)") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                if (isSelected()) {
+                    setBackground(new Color(0, 0, 0, 0));
+                }
+            }
+        };
+        chkVoucherDigunakan.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        chkVoucherDigunakan.setForeground(textMain);
+        chkVoucherDigunakan.setOpaque(false);
         chkVoucherDigunakan.setEnabled(false);
+        
         lblVoucherInfo = new JLabel("Voucher tersedia: 0");
-        lblVoucherInfo.setFont(new Font("Arial", Font.ITALIC, 11));
+        lblVoucherInfo.setFont(new Font("Segoe UI", Font.ITALIC, 11));
         lblVoucherInfo.setForeground(Color.BLUE);
         
         voucherPanel.add(chkVoucherDigunakan, BorderLayout.NORTH);
@@ -122,17 +203,21 @@ public class InputTransaksiForm extends JFrame {
         
         // Waktu Pembayaran
         gbc.gridx = 0; gbc.gridy = 6;
-        formPanel.add(new JLabel("Waktu Pembayaran:"), gbc);
+        formPanel.add(createLabel("Waktu Pembayaran:"), gbc);
         gbc.gridx = 1;
         cmbWaktuBayar = new JComboBox<>(new String[]{"Bayar Sekarang", "Bayar Setelah Selesai"});
+        styleComboBox(cmbWaktuBayar);
         formPanel.add(cmbWaktuBayar, gbc);
         
         // Metode Pembayaran
         JLabel lblMetodePembayaran = new JLabel("Metode Pembayaran:");
+        lblMetodePembayaran.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        lblMetodePembayaran.setForeground(textMain);
         gbc.gridx = 0; gbc.gridy = 7;
         formPanel.add(lblMetodePembayaran, gbc);
         gbc.gridx = 1;
         cmbMetodePembayaran = new JComboBox<>(new String[]{"Cash", "QRIS"});
+        styleComboBox(cmbMetodePembayaran);
         cmbMetodePembayaran.setSelectedIndex(-1);
         formPanel.add(cmbMetodePembayaran, gbc);
         
@@ -146,56 +231,84 @@ public class InputTransaksiForm extends JFrame {
                 lblMetodePembayaran.setVisible(false);
                 cmbMetodePembayaran.setVisible(false);
             }
-    
-            // refresh panel supaya update
             formPanel.revalidate();
             formPanel.repaint();
         });
         
         // Buttons
-        JPanel btnPanel = new JPanel(new FlowLayout());
-        btnHitung = new JButton("Hitung Total");
-        btnSimpan = new JButton("Simpan");
-        btnCetak = new JButton("Cetak Struk");
-        btnTutup = new JButton("Tutup");
-        
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        btnPanel.setOpaque(false);
+
+        btnHitung = createActionButton("Hitung Total", buttonBg);
+        btnSimpan = createActionButton("Simpan", Color.decode("#FFA500"));
+        btnCetak = createActionButton("Cetak Struk", cetakBg);
+        btnTutup = createActionButton("Tutup", Color.decode("#AAAAAA"));
+
         btnHitung.addActionListener(e -> hitungTotal());
         btnSimpan.addActionListener(e -> simpanTransaksi());
         btnCetak.addActionListener(e -> cetakStruk());
         btnTutup.addActionListener(e -> dispose());
-        
+
         btnPanel.add(btnHitung);
         btnPanel.add(btnSimpan);
         btnPanel.add(btnCetak);
         btnPanel.add(btnTutup);
-        
+
         gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2;
         formPanel.add(btnPanel, gbc);
-        
-        // Rincian Panel
-        JPanel rincianPanel = new JPanel(new BorderLayout());
-        rincianPanel.setBorder(BorderFactory.createTitledBorder("Rincian Biaya"));
-        
+
+        mainPanel.add(formPanel, BorderLayout.NORTH);
+
+        // =================== RINCIAN PANEL ===================
+        JPanel rincianPanel = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+            }
+        };
+        rincianPanel.setBorder(BorderFactory.createEmptyBorder(0, 20, 20, 20));
+        rincianPanel.setOpaque(false);
+
         txtRincian = new JTextArea(8, 40);
         txtRincian.setEditable(false);
         txtRincian.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        txtRincian.setBackground(Color.WHITE);
         JScrollPane scrollRincian = new JScrollPane(txtRincian);
-        
+        scrollRincian.setBorder(BorderFactory.createEmptyBorder());
+        scrollRincian.setOpaque(false);
+        scrollRincian.getViewport().setOpaque(false);
+
         lblTotal = new JLabel("TOTAL: Rp 0", SwingConstants.CENTER);
-        lblTotal.setFont(new Font("Arial", Font.BOLD, 16));
+        lblTotal.setFont(new Font("Segoe UI", Font.BOLD, 16));
         lblTotal.setOpaque(true);
         lblTotal.setBackground(Color.YELLOW);
-        
-        rincianPanel.add(scrollRincian, BorderLayout.CENTER);
-        rincianPanel.add(lblTotal, BorderLayout.SOUTH);
-        
-        add(formPanel, BorderLayout.NORTH);
-        add(rincianPanel, BorderLayout.CENTER);
-        
+        lblTotal.setForeground(Color.BLACK);
+
+        // Wrap rincian dalam rounded panel
+        JPanel rincianWrapper = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(tableBg);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
+        rincianWrapper.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 1), "Rincian Biaya"));
+        rincianWrapper.setOpaque(false);
+        rincianWrapper.add(scrollRincian, BorderLayout.CENTER);
+        rincianWrapper.add(lblTotal, BorderLayout.SOUTH);
+
+        rincianPanel.add(rincianWrapper, BorderLayout.CENTER);
+        mainPanel.add(rincianPanel, BorderLayout.CENTER);
+        add(mainPanel, BorderLayout.CENTER);
+
         btnSimpan.setEnabled(false);
         btnCetak.setEnabled(false);
         
-        // Add listener untuk update voucher info saat nama pelanggan berubah
         txtNamaPelanggan.addActionListener(e -> updateVoucherInfo());
         txtNamaPelanggan.addFocusListener(new FocusAdapter() {
             @Override
@@ -203,7 +316,193 @@ public class InputTransaksiForm extends JFrame {
                 updateVoucherInfo();
             }
         });
+
+        // Drag window
+        addWindowDrag(titleBar);
+        normalBounds = getBounds();
+
+        setOpacity(1.0f);
+        updateWindowShape();
     }
+
+    // =================== HELPER METHODS ===================
+    private JLabel createLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        label.setForeground(Color.decode("#222222"));
+        return label;
+    }
+
+    private JTextField createStyledTextField(int columns) {
+        JTextField field = new JTextField(columns);
+        field.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        field.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.decode("#CCCCCC"), 1),
+            BorderFactory.createEmptyBorder(5, 10, 5, 10)
+        ));
+        field.setBackground(Color.WHITE);
+        field.setForeground(Color.decode("#222222"));
+        return field;
+    }
+
+    private void styleComboBox(JComboBox<String> combo) {
+        combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        combo.setBackground(Color.WHITE);
+        combo.setForeground(Color.decode("#222222"));
+    }
+
+    private void styleDateChooser(JDateChooser chooser) {
+        JFormattedTextField textField = (JFormattedTextField) chooser.getDateEditor().getUiComponent();
+        textField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        textField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.decode("#CCCCCC"), 1),
+            BorderFactory.createEmptyBorder(3, 5, 3, 5)
+        ));
+        textField.setBackground(Color.WHITE);
+        textField.setForeground(Color.decode("#222222"));
+    }
+
+    private JButton createActionButton(String text, Color bgColor) {
+        JButton button = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (!isEnabled()) {
+                    g2.setColor(Color.LIGHT_GRAY);
+                } else if (getModel().isPressed()) {
+                    g2.setColor(bgColor.darker());
+                } else if (getModel().isRollover()) {
+                    g2.setColor(bgColor.brighter());
+                } else {
+                    g2.setColor(bgColor);
+                }
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        button.setForeground(Color.WHITE);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        button.setFocusPainted(false);
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setPreferredSize(new Dimension(110, 32));
+        return button;
+    }
+
+    // =================== macOS BUTTONS ===================
+    private JButton createMacOSButton(Color color) {
+        JButton button = new JButton() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(color);
+                g2.fillOval(0, 0, getWidth(), getHeight());
+
+                if (getModel().isRollover()) {
+                    g2.setColor(Color.BLACK);
+                    g2.setStroke(new BasicStroke(1.2f));
+                    int cx = getWidth() / 2;
+                    int cy = getHeight() / 2;
+
+                    if (color.equals(new Color(0xFF5F57))) {
+                        g2.drawLine(cx - 3, cy - 3, cx + 3, cy + 3);
+                        g2.drawLine(cx + 3, cy - 3, cx - 3, cy + 3);
+                    } else if (color.equals(new Color(0xFFBD2E))) {
+                        g2.drawLine(cx - 3, cy, cx + 3, cy);
+                    } else if (color.equals(new Color(0x28CA42))) {
+                        if (isMaximized) {
+                            g2.drawRect(cx - 2, cy - 1, 3, 3);
+                            g2.drawRect(cx - 1, cy - 2, 3, 3);
+                        } else {
+                            g2.drawRect(cx - 2, cy - 2, 4, 4);
+                        }
+                    }
+                }
+                g2.dispose();
+            }
+        };
+        button.setPreferredSize(new Dimension(14, 14));
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setPreferredSize(new Dimension(15, 15));
+                button.revalidate();
+                button.repaint();
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setPreferredSize(new Dimension(14, 14));
+                button.revalidate();
+                button.repaint();
+            }
+        });
+        return button;
+    }
+
+    // =================== UTILITAS WINDOW ===================
+    private void toggleMaximize() {
+        if (isMaximized) {
+            setBounds(normalBounds);
+            isMaximized = false;
+        } else {
+            normalBounds = getBounds();
+            GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+            Rectangle screenBounds = ge.getMaximumWindowBounds();
+            setBounds(screenBounds);
+            isMaximized = true;
+        }
+        updateWindowShape();
+    }
+
+    private void addWindowDrag(Component comp) {
+        comp.addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent e) {
+                mousePoint = e.getPoint();
+            }
+        });
+        comp.addMouseMotionListener(new MouseMotionAdapter() {
+            public void mouseDragged(MouseEvent e) {
+                if (!isMaximized) {
+                    Point curr = e.getLocationOnScreen();
+                    setLocation(curr.x - mousePoint.x, curr.y - mousePoint.y);
+                }
+            }
+        });
+    }
+
+    private void updateWindowShape() {
+        if (!isMaximized) {
+            int arc = 20;
+            Shape shape = new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), arc, arc);
+            setShape(shape);
+        } else {
+            setShape(null);
+        }
+    }
+
+    @Override
+    public void setSize(int width, int height) {
+        super.setSize(width, height);
+        updateWindowShape();
+    }
+
+    @Override
+    public void setBounds(int x, int y, int width, int height) {
+        super.setBounds(x, y, width, height);
+        updateWindowShape();
+    }
+
+    // =================== LOGIC FORM ===================
+    // ... (semua method logika seperti loadPaketData, hitungTotal, simpanTransaksi, dll tetap sama seperti kode asli Anda)
     
     private void updateEstimasiTanggalAmbil() {
         if (cmbPaket.getSelectedIndex() < 0 || paketList.isEmpty()) {
@@ -215,17 +514,14 @@ public class InputTransaksiForm extends JFrame {
         
         Calendar cal = Calendar.getInstance();
         
-        // Tentukan estimasi berdasarkan kapasitas paket
-        // Minimal besok (hari ini + 1)
         if (kapasitas.contains("express") || kapasitas.contains("kilat")) {
-            cal.add(Calendar.DAY_OF_MONTH, 1); // besok
+            cal.add(Calendar.DAY_OF_MONTH, 1);
         } else if (kapasitas.contains("reguler")) {
-            cal.add(Calendar.DAY_OF_MONTH, 3); // 3 hari dari sekarang
+            cal.add(Calendar.DAY_OF_MONTH, 3);
         } else {
-            cal.add(Calendar.DAY_OF_MONTH, 3); // default 3 hari
+            cal.add(Calendar.DAY_OF_MONTH, 3);
         }
         
-        // Pastikan tidak kurang dari tanggal minimum (besok)
         Calendar minCal = Calendar.getInstance();
         minCal.add(Calendar.DAY_OF_MONTH, 1);
         
@@ -247,7 +543,6 @@ public class InputTransaksiForm extends JFrame {
                 txtid.setText(String.valueOf(currentTransactionId));
             }
         } catch (SQLException e) {
-            // Jika ada error, gunakan timestamp sebagai fallback
             currentTransactionId = (int) (System.currentTimeMillis() % 1000000);
             txtid.setText(String.valueOf(currentTransactionId));
         }
@@ -261,8 +556,6 @@ public class InputTransaksiForm extends JFrame {
         PaketLayanan selectedPaket = paketList.get(cmbPaket.getSelectedIndex());
         String paketNama = selectedPaket.nama.toLowerCase();
         
-        // Voucher hanya aktif untuk paket "Cuci" (Cuci Basah atau Cuci Kering)
-        // Tidak aktif untuk "Setrika" atau "Cuci Setrika"
         boolean canUseVoucher = (paketNama.contains("cuci")) && !paketNama.equals("setrika");
         
         chkVoucherDigunakan.setEnabled(canUseVoucher);
@@ -362,7 +655,6 @@ public class InputTransaksiForm extends JFrame {
                 return;
             }
             
-            // Validasi tanggal ambil tidak boleh hari ini atau sebelumnya
             Calendar today = Calendar.getInstance();
             today.set(Calendar.HOUR_OF_DAY, 0);
             today.set(Calendar.MINUTE, 0);
@@ -395,19 +687,15 @@ public class InputTransaksiForm extends JFrame {
                 return;
             }
             
-            // Cek dan buat pelanggan jika belum ada
             idPelanggan = getOrCreatePelanggan(namaPelanggan);
             
-            // Hitung biaya dasar - SEMUA PAKET SEKARANG PER KG
             double biayaDasar = selectedPaket.harga * berat;
             
-            // Hitung penggunaan voucher - mengurangi 7kg dari berat
             boolean voucherDigunakan = chkVoucherDigunakan.isSelected();
             double beratBayar = berat;
             double diskonVoucher = 0;
             
             if (voucherDigunakan) {
-                // Cek voucher yang dimiliki pelanggan
                 int voucherTersedia = getVoucherPelanggan(idPelanggan);
                 if (voucherTersedia < 7) {
                     JOptionPane.showMessageDialog(this, "Voucher tidak mencukupi! Tersedia: " + voucherTersedia + ", Dibutuhkan: 7");
@@ -415,22 +703,18 @@ public class InputTransaksiForm extends JFrame {
                     return;
                 }
                 
-                // Kurangi 7kg dari berat yang harus dibayar
                 beratBayar = Math.max(0, berat - 7);
                 diskonVoucher = Math.min(7, berat) * selectedPaket.harga;
             }
             
             totalBiaya = beratBayar * selectedPaket.harga;
             
-            // Get payment info
             String metodePembayaran = (String) cmbMetodePembayaran.getSelectedItem();
             String waktuBayar = (String) cmbWaktuBayar.getSelectedItem();
             
-            // Format tanggal ambil
             java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("dd/MM/yyyy");
             String tanggalAmbilStr = sdf.format(dateAmbil.getDate());
             
-            // Tampilkan rincian
             StringBuilder rincian = new StringBuilder();
             rincian.append("                  RINCIAN BIAYA                  \n");
             rincian.append("=================================================\n");
@@ -473,7 +757,6 @@ public class InputTransaksiForm extends JFrame {
     
     private int getOrCreatePelanggan(String nama) throws SQLException {
         try (Connection conn = DatabaseConnection.getConnection()) {
-            // Cek apakah pelanggan sudah ada
             String checkSql = "SELECT id_pelanggan FROM pelanggan WHERE nama = ?";
             PreparedStatement checkStmt = conn.prepareStatement(checkSql);
             checkStmt.setString(1, nama);
@@ -482,7 +765,6 @@ public class InputTransaksiForm extends JFrame {
             if (rs.next()) {
                 return rs.getInt("id_pelanggan");
             } else {
-                // Buat pelanggan baru
                 String insertSql = "INSERT INTO pelanggan (nama, total_voucher) VALUES (?, 0)";
                 PreparedStatement insertStmt = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
                 insertStmt.setString(1, nama);
@@ -523,7 +805,6 @@ public class InputTransaksiForm extends JFrame {
                 return;
             }
             
-            // Validasi tanggal ambil tidak boleh hari ini atau sebelumnya
             Calendar today = Calendar.getInstance();
             today.set(Calendar.HOUR_OF_DAY, 0);
             today.set(Calendar.MINUTE, 0);
@@ -561,13 +842,11 @@ public class InputTransaksiForm extends JFrame {
                 value4 = metodePembayaran + " - " + waktuBayar;
             }
             
-            // Convert tanggal ambil ke SQL Date
             java.sql.Date sqlDateAmbil = new java.sql.Date(dateAmbil.getDate().getTime());
             
             try (Connection conn = DatabaseConnection.getConnection()) {
                 conn.setAutoCommit(false);
                 
-                // Simpan transaksi dengan tanggal_ambil
                 String insertTransaksiSql = "INSERT INTO transaksi (id_pelanggan, id_jenis, berat_kg, " + 
                                           "pembayaran, total_biaya, voucher_didapat, status_pesanan, id_user, tanggal_ambil) " +
                                           "VALUES (?, ?, ?, ?, ?, ?, 'diterima', ?, ?)";
@@ -653,7 +932,6 @@ public class InputTransaksiForm extends JFrame {
         btnSimpan.setEnabled(false);
         btnCetak.setEnabled(false);
         
-        // Generate ID transaksi baru untuk transaksi berikutnya
         generateNextTransactionId();
     }
     
@@ -663,7 +941,6 @@ public class InputTransaksiForm extends JFrame {
             return;
         }
         
-        // Buat dialog untuk menampilkan struk
         JDialog strukDialog = new JDialog(this, "Struk Transaksi", true);
         strukDialog.setSize(400, 550);
         strukDialog.setLocationRelativeTo(this);
@@ -685,11 +962,9 @@ public class InputTransaksiForm extends JFrame {
         struk.append(txtRincian.getText());
         struk.append("\n");
         
-        // Info voucher yang didapat
         struk.append("* Anda mendapat 1 voucher dari transaksi ini    \n");
         struk.append("* Kumpulkan 7 voucher untuk gratis cuci 7kg     \n");
         
-        // Info pembayaran
         String waktuBayar = (String) cmbWaktuBayar.getSelectedItem();
         if (waktuBayar.equals("Bayar Setelah Selesai")) {
             struk.append("\n");
@@ -731,7 +1006,6 @@ public class InputTransaksiForm extends JFrame {
         strukDialog.setVisible(true);
     }
     
-    // Inner class untuk menyimpan data paket
     private class PaketLayanan {
         int id;
         String nama;
