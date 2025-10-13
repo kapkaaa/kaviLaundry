@@ -1,12 +1,10 @@
-/*
- * LaporanKeuanganForm.java - Updated dengan Metode Pembayaran, Filter Pending, dan Validasi Tanggal
- */
 package kavilaundry;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.geom.RoundRectangle2D;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -21,95 +19,183 @@ public class LaporanKeuanganForm extends JFrame {
     private DefaultTableModel model;
     private JLabel lblTotalPendapatan, lblTotalTransaksi, lblTotalCash, lblTotalQRIS;
     private JButton btnFilter, btnExport, btnTutup;
-    
+    private Point mousePoint;
+    private boolean isMaximized = false;
+    private Rectangle normalBounds;
+
     public LaporanKeuanganForm() {
+        setUndecorated(true);
         initComponents();
         loadData();
         setLocationRelativeTo(null);
+        updateWindowShape();
     }
-    
+
     private void initComponents() {
-        setTitle("Laporan Keuangan");
+        Color bgColor = Color.decode("#b3ebf2");
+        Color textMain = Color.decode("#222222");
+        Color buttonBg = Color.decode("#6da395");
+        Color exportBg = Color.decode("#4A90E2"); // Biru untuk export
+        Color tableBg = Color.WHITE;
+
         setSize(1000, 700);
+        setBackground(new Color(0, 0, 0, 0));
         setLayout(new BorderLayout());
-        
-        // Panel Filter
-        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        filterPanel.setBorder(BorderFactory.createTitledBorder("Filter Tanggal"));
-        
-        filterPanel.add(new JLabel("Dari:"));
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        // =================== PANEL UTAMA DENGAN ROUNDED BACKGROUND ===================
+        JPanel mainPanel = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(bgColor);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
+        mainPanel.setOpaque(false);
+
+        // =================== macOS TITLE BAR ===================
+        JPanel titleBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(bgColor);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
+        titleBar.setPreferredSize(new Dimension(1000, 40));
+        titleBar.setOpaque(false);
+
+        JButton btnClose = createMacOSButton(new Color(0xFF5F57));
+        JButton btnMinimize = createMacOSButton(new Color(0xFFBD2E));
+        JButton btnMaximize = createMacOSButton(new Color(0x28CA42));
+
+        btnClose.addActionListener(e -> dispose());
+        btnMinimize.addActionListener(e -> setState(JFrame.ICONIFIED));
+        btnMaximize.addActionListener(e -> toggleMaximize());
+
+        titleBar.add(btnClose);
+        titleBar.add(btnMinimize);
+        titleBar.add(btnMaximize);
+
+        JLabel titleLabel = new JLabel("Laporan Keuangan", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        titleLabel.setForeground(textMain);
+        titleLabel.setOpaque(false);
+        titleBar.add(Box.createHorizontalGlue());
+        titleBar.add(titleLabel);
+        titleBar.add(Box.createHorizontalGlue());
+
+        mainPanel.add(titleBar, BorderLayout.NORTH);
+
+        // =================== PANEL FILTER ===================
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+            }
+        };
+        filterPanel.setOpaque(false);
+
+        filterPanel.add(createLabel("Dari:"));
         dateFrom = new JDateChooser();
         dateFrom.setPreferredSize(new Dimension(120, 25));
-        dateFrom.setDate(new Date()); // Default hari ini
+        dateFrom.setDate(new Date());
+        styleDateChooser(dateFrom);
         filterPanel.add(dateFrom);
-        
-        filterPanel.add(new JLabel("Sampai:"));
+
+        filterPanel.add(createLabel("Sampai:"));
         dateTo = new JDateChooser();
         dateTo.setPreferredSize(new Dimension(120, 25));
-        dateTo.setDate(new Date()); // Default hari ini
+        dateTo.setDate(new Date());
+        styleDateChooser(dateTo);
         filterPanel.add(dateTo);
-        
-        // Add property change listeners untuk validasi real-time
+
         dateFrom.addPropertyChangeListener("date", new PropertyChangeListener() {
             @Override
             public void propertyChange(PropertyChangeEvent evt) {
                 validateDateRange();
             }
         });
-        
+
         dateTo.addPropertyChangeListener("date", new PropertyChangeListener() {
             @Override
             public void propertyChange(PropertyChangeEvent evt) {
                 validateDateRange();
             }
         });
-        
-        btnFilter = new JButton("Filter");
-        btnExport = new JButton("Export Excel");
-        btnTutup = new JButton("Tutup");
-        
+
+        btnFilter = createActionButton("Filter", buttonBg);
+        btnExport = createActionButton("Export Excel", exportBg);
+        btnTutup = createActionButton("Tutup", Color.decode("#AAAAAA"));
+
         btnFilter.addActionListener(e -> loadDataByDateRange());
         btnExport.addActionListener(e -> exportToExcel());
         btnTutup.addActionListener(e -> dispose());
-        
+
         filterPanel.add(btnFilter);
         filterPanel.add(btnExport);
         filterPanel.add(btnTutup);
-        
-        // Summary Panel dengan 4 kolom
-        JPanel summaryPanel = new JPanel(new GridLayout(2, 2, 10, 5));
-        summaryPanel.setBorder(BorderFactory.createTitledBorder("Ringkasan"));
-        
+
+        // Wrap filterPanel in a titled border panel
+        JPanel filterWrapper = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+            }
+        };
+        filterWrapper.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 1), "Filter Tanggal"));
+        filterWrapper.setOpaque(false);
+        filterWrapper.add(filterPanel, BorderLayout.CENTER);
+
+        // =================== SUMMARY PANEL ===================
+        JPanel summaryPanel = new JPanel(new GridLayout(2, 2, 10, 5)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+            }
+        };
+        summaryPanel.setOpaque(false);
+        summaryPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 1), "Ringkasan"));
+
         lblTotalPendapatan = new JLabel("Total Pendapatan: Rp 0", SwingConstants.CENTER);
-        lblTotalPendapatan.setFont(new Font("Arial", Font.BOLD, 14));
+        lblTotalPendapatan.setFont(new Font("Segoe UI", Font.BOLD, 13));
         lblTotalPendapatan.setOpaque(true);
         lblTotalPendapatan.setBackground(Color.GREEN);
         lblTotalPendapatan.setForeground(Color.BLACK);
-        
+
         lblTotalTransaksi = new JLabel("Total Transaksi: 0", SwingConstants.CENTER);
-        lblTotalTransaksi.setFont(new Font("Arial", Font.BOLD, 14));
+        lblTotalTransaksi.setFont(new Font("Segoe UI", Font.BOLD, 13));
         lblTotalTransaksi.setOpaque(true);
         lblTotalTransaksi.setBackground(Color.CYAN);
         lblTotalTransaksi.setForeground(Color.BLACK);
-        
+
         lblTotalCash = new JLabel("Cash: Rp 0", SwingConstants.CENTER);
-        lblTotalCash.setFont(new Font("Arial", Font.BOLD, 14));
+        lblTotalCash.setFont(new Font("Segoe UI", Font.BOLD, 13));
         lblTotalCash.setOpaque(true);
-        lblTotalCash.setBackground(new Color(255, 165, 0)); // Orange
+        lblTotalCash.setBackground(new Color(255, 165, 0));
         lblTotalCash.setForeground(Color.BLACK);
-        
+
         lblTotalQRIS = new JLabel("QRIS: Rp 0", SwingConstants.CENTER);
-        lblTotalQRIS.setFont(new Font("Arial", Font.BOLD, 14));
+        lblTotalQRIS.setFont(new Font("Segoe UI", Font.BOLD, 13));
         lblTotalQRIS.setOpaque(true);
-        lblTotalQRIS.setBackground(Color.MAGENTA); // Purple
+        lblTotalQRIS.setBackground(Color.MAGENTA);
         lblTotalQRIS.setForeground(Color.BLACK);
-        
+
         summaryPanel.add(lblTotalPendapatan);
         summaryPanel.add(lblTotalTransaksi);
         summaryPanel.add(lblTotalCash);
         summaryPanel.add(lblTotalQRIS);
-        
-        // Table dengan kolom metode pembayaran
+
+        // =================== TABLE ===================
         String[] columns = {"Tanggal", "ID Transaksi", "Pelanggan", "Paket", "Berat", "Total", "Metode Bayar", "Status", "Kasir"};
         model = new DefaultTableModel(columns, 0) {
             @Override
@@ -117,37 +203,226 @@ public class LaporanKeuanganForm extends JFrame {
                 return false;
             }
         };
-        
+
         table = new JTable(model);
-        
-        // Set column widths
-        table.getColumnModel().getColumn(0).setPreferredWidth(120); // Tanggal
-        table.getColumnModel().getColumn(1).setPreferredWidth(50);  // ID
-        table.getColumnModel().getColumn(2).setPreferredWidth(120); // Pelanggan
-        table.getColumnModel().getColumn(3).setPreferredWidth(150); // Paket
-        table.getColumnModel().getColumn(4).setPreferredWidth(70);  // Berat
-        table.getColumnModel().getColumn(5).setPreferredWidth(100); // Total
-        table.getColumnModel().getColumn(6).setPreferredWidth(150); // Metode Bayar
-        table.getColumnModel().getColumn(7).setPreferredWidth(100); // Status
-        table.getColumnModel().getColumn(8).setPreferredWidth(100); // Kasir
-        
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
+        table.setRowHeight(25);
+        table.setSelectionBackground(buttonBg);
+        table.setSelectionForeground(Color.WHITE);
+
+        table.getColumnModel().getColumn(0).setPreferredWidth(120);
+        table.getColumnModel().getColumn(1).setPreferredWidth(50);
+        table.getColumnModel().getColumn(2).setPreferredWidth(120);
+        table.getColumnModel().getColumn(3).setPreferredWidth(150);
+        table.getColumnModel().getColumn(4).setPreferredWidth(70);
+        table.getColumnModel().getColumn(5).setPreferredWidth(100);
+        table.getColumnModel().getColumn(6).setPreferredWidth(150);
+        table.getColumnModel().getColumn(7).setPreferredWidth(100);
+        table.getColumnModel().getColumn(8).setPreferredWidth(100);
+
         JScrollPane scrollPane = new JScrollPane(table);
-        
-        // Layout
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+
+        JPanel tablePanel = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(tableBg);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
+        tablePanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        tablePanel.setOpaque(false);
+        tablePanel.add(scrollPane, BorderLayout.CENTER);
+
+        // =================== ASSEMBLE LAYOUT ===================
         JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.add(filterPanel, BorderLayout.NORTH);
+        topPanel.setOpaque(false);
+        topPanel.add(filterWrapper, BorderLayout.NORTH);
         topPanel.add(summaryPanel, BorderLayout.SOUTH);
-        
-        add(topPanel, BorderLayout.NORTH);
-        add(scrollPane, BorderLayout.CENTER);
+
+        mainPanel.add(topPanel, BorderLayout.NORTH);
+        mainPanel.add(tablePanel, BorderLayout.CENTER);
+        add(mainPanel, BorderLayout.CENTER);
+
+        // Drag window
+        addWindowDrag(titleBar);
+        normalBounds = getBounds();
+
+        setOpacity(1.0f);
+        updateWindowShape();
     }
-    
+
+    // =================== HELPER METHODS ===================
+    private JLabel createLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        label.setForeground(Color.decode("#222222"));
+        return label;
+    }
+
+    private void styleDateChooser(JDateChooser chooser) {
+        JFormattedTextField textField = (JFormattedTextField) chooser.getDateEditor().getUiComponent();
+        textField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        textField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.decode("#CCCCCC"), 1),
+            BorderFactory.createEmptyBorder(3, 5, 3, 5)
+        ));
+        textField.setBackground(Color.WHITE);
+        textField.setForeground(Color.decode("#222222"));
+    }
+
+    private JButton createActionButton(String text, Color bgColor) {
+        JButton button = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (!isEnabled()) {
+                    g2.setColor(Color.LIGHT_GRAY);
+                } else if (getModel().isPressed()) {
+                    g2.setColor(bgColor.darker());
+                } else if (getModel().isRollover()) {
+                    g2.setColor(bgColor.brighter());
+                } else {
+                    g2.setColor(bgColor);
+                }
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        button.setForeground(Color.WHITE);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        button.setFocusPainted(false);
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setPreferredSize(new Dimension(110, 32));
+        return button;
+    }
+
+    // =================== macOS BUTTONS ===================
+    private JButton createMacOSButton(Color color) {
+        JButton button = new JButton() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(color);
+                g2.fillOval(0, 0, getWidth(), getHeight());
+
+                if (getModel().isRollover()) {
+                    g2.setColor(Color.BLACK);
+                    g2.setStroke(new BasicStroke(1.2f));
+                    int cx = getWidth() / 2;
+                    int cy = getHeight() / 2;
+
+                    if (color.equals(new Color(0xFF5F57))) {
+                        g2.drawLine(cx - 3, cy - 3, cx + 3, cy + 3);
+                        g2.drawLine(cx + 3, cy - 3, cx - 3, cy + 3);
+                    } else if (color.equals(new Color(0xFFBD2E))) {
+                        g2.drawLine(cx - 3, cy, cx + 3, cy);
+                    } else if (color.equals(new Color(0x28CA42))) {
+                        if (isMaximized) {
+                            g2.drawRect(cx - 2, cy - 1, 3, 3);
+                            g2.drawRect(cx - 1, cy - 2, 3, 3);
+                        } else {
+                            g2.drawRect(cx - 2, cy - 2, 4, 4);
+                        }
+                    }
+                }
+                g2.dispose();
+            }
+        };
+        button.setPreferredSize(new Dimension(14, 14));
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setPreferredSize(new Dimension(15, 15));
+                button.revalidate();
+                button.repaint();
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setPreferredSize(new Dimension(14, 14));
+                button.revalidate();
+                button.repaint();
+            }
+        });
+        return button;
+    }
+
+    // =================== UTILITAS WINDOW ===================
+    private void toggleMaximize() {
+        if (isMaximized) {
+            setBounds(normalBounds);
+            isMaximized = false;
+        } else {
+            normalBounds = getBounds();
+            GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+            Rectangle screenBounds = ge.getMaximumWindowBounds();
+            setBounds(screenBounds);
+            isMaximized = true;
+        }
+        updateWindowShape();
+    }
+
+    private void addWindowDrag(Component comp) {
+        comp.addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent e) {
+                mousePoint = e.getPoint();
+            }
+        });
+        comp.addMouseMotionListener(new MouseMotionAdapter() {
+            public void mouseDragged(MouseEvent e) {
+                if (!isMaximized) {
+                    Point curr = e.getLocationOnScreen();
+                    setLocation(curr.x - mousePoint.x, curr.y - mousePoint.y);
+                }
+            }
+        });
+    }
+
+    private void updateWindowShape() {
+        if (!isMaximized) {
+            int arc = 20;
+            Shape shape = new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), arc, arc);
+            setShape(shape);
+        } else {
+            setShape(null);
+        }
+    }
+
+    @Override
+    public void setSize(int width, int height) {
+        super.setSize(width, height);
+        updateWindowShape();
+    }
+
+    @Override
+    public void setBounds(int x, int y, int width, int height) {
+        super.setBounds(x, y, width, height);
+        updateWindowShape();
+    }
+
+    // =================== LOGIC FORM ===================
     private void validateDateRange() {
         Date fromDate = dateFrom.getDate();
         Date toDate = dateTo.getDate();
         
         if (fromDate != null && toDate != null) {
-            // Normalize dates untuk perbandingan (set ke midnight)
             Calendar calFrom = Calendar.getInstance();
             calFrom.setTime(fromDate);
             calFrom.set(Calendar.HOUR_OF_DAY, 0);
@@ -162,20 +437,16 @@ public class LaporanKeuanganForm extends JFrame {
             calTo.set(Calendar.SECOND, 0);
             calTo.set(Calendar.MILLISECOND, 0);
             
-            // Jika tanggal "Sampai" lebih kecil dari "Dari", set minimum date
             if (calTo.before(calFrom)) {
                 dateTo.setMinSelectableDate(calFrom.getTime());
-                // Auto-adjust ke tanggal "Dari"
                 dateTo.setDate(calFrom.getTime());
             } else {
-                // Update minimum selectable date untuk dateTo
                 dateTo.setMinSelectableDate(calFrom.getTime());
             }
         }
     }
     
     private void loadData() {
-        // Load data untuk hari ini
         loadDataByDateRange();
     }
     
@@ -188,7 +459,6 @@ public class LaporanKeuanganForm extends JFrame {
             return;
         }
         
-        // Validasi: Tanggal "Sampai" tidak boleh lebih kecil dari "Dari"
         Calendar calFrom = Calendar.getInstance();
         calFrom.setTime(fromDate);
         calFrom.set(Calendar.HOUR_OF_DAY, 0);
@@ -233,7 +503,6 @@ public class LaporanKeuanganForm extends JFrame {
                         "LEFT JOIN paket pk ON t.id_jenis = pk.id " +
                         "LEFT JOIN user u ON t.id_user = u.id_user " +
                         "WHERE DATE(t.tanggal_transaksi) BETWEEN ? AND ? " +
-                        // HANYA TRANSAKSI YANG SUDAH LUNAS (tidak termasuk pending/belum bayar)
                         "AND NOT (t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.pembayaran NOT LIKE '%LUNAS%') " +
                         "ORDER BY t.tanggal_transaksi DESC";
             
@@ -249,12 +518,10 @@ public class LaporanKeuanganForm extends JFrame {
                 String statusBayar = rs.getString("status_bayar");
                 String tingkatCuci = rs.getString("pembayaran");
                 
-                // Hanya hitung yang sudah lunas
                 if ("Lunas".equals(statusBayar)) {
                     totalPendapatan += biaya;
                     totalTransaksi++;
                     
-                    // Pisahkan berdasarkan metode pembayaran
                     if (tingkatCuci != null && tingkatCuci.contains("QRIS")) {
                         totalQRIS += biaya;
                     } else {
@@ -262,7 +529,6 @@ public class LaporanKeuanganForm extends JFrame {
                     }
                 }
                 
-                // Extract metode pembayaran untuk display
                 String metodeBayar = "Cash - Bayar Sekarang";
                 if (tingkatCuci != null) {
                     metodeBayar = tingkatCuci.replace(" - LUNAS", "");
@@ -282,7 +548,6 @@ public class LaporanKeuanganForm extends JFrame {
                 model.addRow(row);
             }
             
-            // Update summary
             lblTotalPendapatan.setText("Total Pendapatan: Rp " + String.format("%,.0f", totalPendapatan));
             lblTotalTransaksi.setText("Total Transaksi: " + totalTransaksi);
             lblTotalCash.setText("Cash: Rp " + String.format("%,.0f", totalCash));
@@ -294,7 +559,6 @@ public class LaporanKeuanganForm extends JFrame {
     }
     
     private void exportToExcel() {
-        // Validasi tanggal sebelum export
         Date fromDate = dateFrom.getDate();
         Date toDate = dateTo.getDate();
         
@@ -325,7 +589,6 @@ public class LaporanKeuanganForm extends JFrame {
             return;
         }
         
-        // Implementasi export ke CSV dengan data yang sudah difilter
         try {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Simpan Laporan Keuangan");
@@ -340,16 +603,12 @@ public class LaporanKeuanganForm extends JFrame {
                 java.io.File fileToSave = fileChooser.getSelectedFile();
                 
                 try (java.io.PrintWriter writer = new java.io.PrintWriter(fileToSave)) {
-                    // Write header
                     writer.println("LAPORAN KEUANGAN KAVI LAUNDRY");
                     writer.println("Periode: " + new SimpleDateFormat("dd/MM/yyyy").format(dateFrom.getDate()) + 
                                   " - " + new SimpleDateFormat("dd/MM/yyyy").format(dateTo.getDate()));
                     writer.println();
-                    
-                    // Write column headers
                     writer.println("Tanggal,ID Transaksi,Pelanggan,Paket,Berat,Total,Metode Bayar,Status,Kasir");
                     
-                    // Write data
                     for (int i = 0; i < model.getRowCount(); i++) {
                         StringBuilder line = new StringBuilder();
                         for (int j = 0; j < model.getColumnCount(); j++) {
@@ -360,7 +619,6 @@ public class LaporanKeuanganForm extends JFrame {
                         writer.println(line.toString());
                     }
                     
-                    // Write summary
                     writer.println();
                     writer.println("RINGKASAN");
                     writer.println(lblTotalPendapatan.getText().replace("Total Pendapatan: ", "Total Pendapatan,"));
@@ -370,7 +628,6 @@ public class LaporanKeuanganForm extends JFrame {
                     writer.println(lblTotalCash.getText().replace("Cash: ", "Pembayaran Tunai,"));
                     writer.println(lblTotalQRIS.getText().replace("QRIS: ", "Pembayaran Non Tunai,"));
                     
-                    // Persentase
                     double totalPendapatan = 0;
                     String totalText = lblTotalPendapatan.getText().replace("Total Pendapatan: Rp ", "").replace(",", "");
                     try {
@@ -388,7 +645,7 @@ public class LaporanKeuanganForm extends JFrame {
                             writer.println("Non Tunai," + String.format("%.1f%%", persenQRIS));
                         }
                     } catch (NumberFormatException e) {
-                        // Skip percentage calculation if parsing fails
+                        // Skip
                     }
                     
                     JOptionPane.showMessageDialog(this, "Laporan berhasil diekspor ke: " + fileToSave.getAbsolutePath());
