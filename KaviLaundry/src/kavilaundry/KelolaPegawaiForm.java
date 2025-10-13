@@ -272,19 +272,25 @@ public class KelolaPegawaiForm extends JFrame {
         combo.setForeground(Color.decode("#222222"));
     }
 
-    private JButton createActionButton(String text, Color bgColor) {
+    private JButton createActionButton(String text, Color activeColor) {
         JButton button = new JButton(text) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                if (getModel().isPressed()) {
-                    g2.setColor(bgColor.darker());
+
+                Color bgColor;
+                if (!isEnabled()) {
+                    bgColor = Color.LIGHT_GRAY; // Warna disabled
+                } else if (getModel().isPressed()) {
+                    bgColor = activeColor.darker();
                 } else if (getModel().isRollover()) {
-                    g2.setColor(bgColor.brighter());
+                    bgColor = activeColor.brighter();
                 } else {
-                    g2.setColor(bgColor);
+                    bgColor = activeColor;
                 }
+
+                g2.setColor(bgColor);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
                 g2.dispose();
                 super.paintComponent(g);
