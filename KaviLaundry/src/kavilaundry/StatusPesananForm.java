@@ -1,6 +1,3 @@
-/*
- * StatusPesananForm.java - Enhanced dengan Auto Detect Update Tanggal
- */
 package kavilaundry;
 
 import javax.swing.*;
@@ -8,6 +5,7 @@ import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.geom.RoundRectangle2D;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.regex.*;
@@ -19,90 +17,163 @@ public class StatusPesananForm extends JFrame {
     private JButton btnUpdate, btnRefresh, btnTutup, btnDetail, btnClearSearch;
     private JTextField txtSearch;
     private TableRowSorter<DefaultTableModel> sorter;
-    
+    private Point mousePoint;
+    private boolean isMaximized = false;
+    private Rectangle normalBounds;
+
     public StatusPesananForm() {
+        setUndecorated(true);
         initComponents();
         loadData();
         setLocationRelativeTo(null);
+        updateWindowShape();
     }
     
     private void initComponents() {
-        setTitle("Status Pesanan & Pembayaran");
+        Color bgColor = Color.decode("#b3ebf2");
+        Color textMain = Color.decode("#222222");
+        Color updateBg = Color.decode("#6da395");   // Hijau untuk update
+        Color detailBg = Color.decode("#4A90E2");   // Biru untuk detail
+        Color tutupBg = Color.decode("#FF4444");    // Merah untuk tutup
+        Color tableBg = Color.WHITE;
+
         setSize(1100, 600);
+        setBackground(new Color(0, 0, 0, 0));
         setLayout(new BorderLayout(10, 10));
-        
-        // Panel utama dengan padding
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+
+        // =================== PANEL UTAMA DENGAN ROUNDED BACKGROUND ===================
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(bgColor);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        
-        // Panel Search di atas
-        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        searchPanel.setBorder(BorderFactory.createTitledBorder("Pencarian"));
-        
-        searchPanel.add(new JLabel("Cari (ID/Nama/Paket):"));
-        txtSearch = new JTextField(30);
+        mainPanel.setOpaque(false);
+
+        // =================== macOS TITLE BAR ===================
+        JPanel titleBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(bgColor);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
+        titleBar.setPreferredSize(new Dimension(1100, 40));
+        titleBar.setOpaque(false);
+
+        JButton btnClose = createMacOSButton(new Color(0xFF5F57));
+        JButton btnMinimize = createMacOSButton(new Color(0xFFBD2E));
+        JButton btnMaximize = createMacOSButton(new Color(0x28CA42));
+
+        btnClose.addActionListener(e -> dispose());
+        btnMinimize.addActionListener(e -> setState(JFrame.ICONIFIED));
+        btnMaximize.addActionListener(e -> toggleMaximize());
+
+        titleBar.add(btnClose);
+        titleBar.add(btnMinimize);
+        titleBar.add(btnMaximize);
+
+        JLabel titleLabel = new JLabel("Status Pesanan & Pembayaran", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        titleLabel.setForeground(textMain);
+        titleLabel.setOpaque(false);
+        titleBar.add(Box.createHorizontalGlue());
+        titleBar.add(titleLabel);
+        titleBar.add(Box.createHorizontalGlue());
+
+        mainPanel.add(titleBar, BorderLayout.NORTH);
+
+        // =================== PANEL SEARCH ===================
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+            }
+        };
+        searchPanel.setOpaque(false);
+        searchPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 1), "Pencarian"));
+
+        searchPanel.add(createLabel("Cari (ID/Nama/Paket):"));
+        txtSearch = createStyledTextField(30);
         searchPanel.add(txtSearch);
-        
-        btnClearSearch = new JButton("Clear");
+
+        btnClearSearch = createActionButton("Clear", Color.GRAY);
         searchPanel.add(btnClearSearch);
-        
-        // Panel kontrol
-        JPanel controlPanel = new JPanel(new GridBagLayout());
-        controlPanel.setBorder(BorderFactory.createTitledBorder("Update Status & Pembayaran"));
-        
+
+        // =================== PANEL KONTROL ===================
+        JPanel controlPanel = new JPanel(new GridBagLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+            }
+        };
+        controlPanel.setOpaque(false);
+        controlPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 1), "Update Status & Pembayaran"));
+
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(8, 8, 8, 8);
         gbc.anchor = GridBagConstraints.WEST;
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        
+
         // Status Pesanan
         gbc.gridx = 0; gbc.gridy = 0;
-        controlPanel.add(new JLabel("Status Pesanan:"), gbc);
+        controlPanel.add(createLabel("Status Pesanan:"), gbc);
         gbc.gridx = 1; gbc.gridwidth = 2;
         cmbStatus = new JComboBox<>(new String[]{"diterima", "dicuci", "dijemur", "setrika", "selesai", "diambil"});
+        styleComboBox(cmbStatus);
         cmbStatus.setPreferredSize(new Dimension(200, 25));
         controlPanel.add(cmbStatus, gbc);
-        
+
         // Status Pembayaran
         gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1;
-        controlPanel.add(new JLabel("Status Bayar:"), gbc);
+        controlPanel.add(createLabel("Status Bayar:"), gbc);
         gbc.gridx = 1; gbc.gridwidth = 2;
         cmbStatusBayar = new JComboBox<>(new String[]{"Belum Bayar", "Lunas"});
+        styleComboBox(cmbStatusBayar);
         cmbStatusBayar.setPreferredSize(new Dimension(200, 25));
         controlPanel.add(cmbStatusBayar, gbc);
-        
+
         // Buttons
         gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
-        btnUpdate = new JButton("💾 Update");
-        btnUpdate.setPreferredSize(new Dimension(150, 30));
-        btnUpdate.setBackground(new Color(46, 204, 113));
-        btnUpdate.setFocusPainted(false);
+        btnUpdate = createActionButton("💾 Update", updateBg);
+        btnUpdate.setPreferredSize(new Dimension(120, 32));
         controlPanel.add(btnUpdate, gbc);
-        
+
         gbc.gridx = 1;
-        btnDetail = new JButton("📄 Detail");
-        btnDetail.setPreferredSize(new Dimension(100, 30));
+        btnDetail = createActionButton("📄 Detail", detailBg);
+        btnDetail.setPreferredSize(new Dimension(100, 32));
         controlPanel.add(btnDetail, gbc);
-        
+
         gbc.gridx = 2;
-        btnRefresh = new JButton("🔄 Refresh");
-        btnRefresh.setPreferredSize(new Dimension(100, 30));
+        btnRefresh = createActionButton("🔄 Refresh", Color.decode("#FFA500"));
+        btnRefresh.setPreferredSize(new Dimension(100, 32));
         controlPanel.add(btnRefresh, gbc);
-        
+
         gbc.gridx = 3;
-        btnTutup = new JButton("❌ Tutup");
-        btnTutup.setPreferredSize(new Dimension(100, 30));
-        btnTutup.setBackground(new Color(231, 76, 60));
-        btnTutup.setFocusPainted(false);
+        btnTutup = createActionButton("❌ Tutup", tutupBg);
+        btnTutup.setPreferredSize(new Dimension(100, 32));
         controlPanel.add(btnTutup, gbc);
-        
+
         // Event listeners
         btnUpdate.addActionListener(e -> updateSemuaStatus());
         btnDetail.addActionListener(e -> showDetail());
         btnRefresh.addActionListener(e -> loadData());
         btnTutup.addActionListener(e -> dispose());
         btnClearSearch.addActionListener(e -> clearSearch());
-        
+
         // Search listener dengan delay
         txtSearch.addKeyListener(new KeyAdapter() {
             private Timer timer;
@@ -117,8 +188,8 @@ public class StatusPesananForm extends JFrame {
                 timer.start();
             }
         });
-        
-        // Table dengan kolom tambahan untuk status pembayaran
+
+        // =================== TABLE ===================
         String[] columns = {"ID", "Tanggal", "Pelanggan", "Paket", "Berat", "Status Pesanan", "Status Bayar", "Metode & Waktu", "Total"};
         model = new DefaultTableModel(columns, 0) {
             @Override
@@ -126,48 +197,238 @@ public class StatusPesananForm extends JFrame {
                 return false;
             }
         };
-        
+
         table = new JTable(model);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setRowHeight(25);
-        table.setFont(new Font("Arial", Font.PLAIN, 12));
-        table.getTableHeader().setFont(new Font("Arial", Font.BOLD, 12));
-        
-        // Setup sorter untuk search
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
+
         sorter = new TableRowSorter<>(model);
         table.setRowSorter(sorter);
-        
-        // Set column widths
-        table.getColumnModel().getColumn(0).setPreferredWidth(50);  // ID
-        table.getColumnModel().getColumn(1).setPreferredWidth(120); // Tanggal
-        table.getColumnModel().getColumn(2).setPreferredWidth(120); // Pelanggan
-        table.getColumnModel().getColumn(3).setPreferredWidth(150); // Paket
-        table.getColumnModel().getColumn(4).setPreferredWidth(70);  // Berat
-        table.getColumnModel().getColumn(5).setPreferredWidth(100); // Status Pesanan
-        table.getColumnModel().getColumn(6).setPreferredWidth(100); // Status Bayar
-        table.getColumnModel().getColumn(7).setPreferredWidth(150); // Metode & Waktu
-        table.getColumnModel().getColumn(8).setPreferredWidth(100); // Total
-        
-        // Add row selection listener to update combo boxes
+
+        table.getColumnModel().getColumn(0).setPreferredWidth(50);
+        table.getColumnModel().getColumn(1).setPreferredWidth(120);
+        table.getColumnModel().getColumn(2).setPreferredWidth(120);
+        table.getColumnModel().getColumn(3).setPreferredWidth(150);
+        table.getColumnModel().getColumn(4).setPreferredWidth(70);
+        table.getColumnModel().getColumn(5).setPreferredWidth(100);
+        table.getColumnModel().getColumn(6).setPreferredWidth(100);
+        table.getColumnModel().getColumn(7).setPreferredWidth(150);
+        table.getColumnModel().getColumn(8).setPreferredWidth(100);
+
         table.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 updateComboBoxes();
             }
         });
-        
+
         JScrollPane scrollPane = new JScrollPane(table);
-        scrollPane.setBorder(BorderFactory.createTitledBorder("Daftar Pesanan"));
-        
-        // Gabungkan panels
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+
+        JPanel tablePanel = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.setColor(tableBg);
+                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                g2d.dispose();
+                super.paintComponent(g);
+            }
+        };
+        tablePanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 1), "Daftar Pesanan"));
+        tablePanel.setOpaque(false);
+        tablePanel.add(scrollPane, BorderLayout.CENTER);
+
+        // =================== ASSEMBLE LAYOUT ===================
         JPanel topPanel = new JPanel(new BorderLayout(5, 5));
+        topPanel.setOpaque(false);
         topPanel.add(searchPanel, BorderLayout.NORTH);
         topPanel.add(controlPanel, BorderLayout.CENTER);
-        
+
         mainPanel.add(topPanel, BorderLayout.NORTH);
-        mainPanel.add(scrollPane, BorderLayout.CENTER);
-        
-        add(mainPanel);
+        mainPanel.add(tablePanel, BorderLayout.CENTER);
+        add(mainPanel, BorderLayout.CENTER);
+
+        // Drag window
+        addWindowDrag(titleBar);
+        normalBounds = getBounds();
+
+        setOpacity(1.0f);
+        updateWindowShape();
     }
+
+    // =================== HELPER METHODS ===================
+    private JLabel createLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        label.setForeground(Color.decode("#222222"));
+        return label;
+    }
+
+    private JTextField createStyledTextField(int columns) {
+        JTextField field = new JTextField(columns);
+        field.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        field.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.decode("#CCCCCC"), 1),
+            BorderFactory.createEmptyBorder(5, 10, 5, 10)
+        ));
+        field.setBackground(Color.WHITE);
+        field.setForeground(Color.decode("#222222"));
+        return field;
+    }
+
+    private void styleComboBox(JComboBox<String> combo) {
+        combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        combo.setBackground(Color.WHITE);
+        combo.setForeground(Color.decode("#222222"));
+    }
+
+    private JButton createActionButton(String text, Color bgColor) {
+        JButton button = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (!isEnabled()) {
+                    g2.setColor(Color.LIGHT_GRAY);
+                } else if (getModel().isPressed()) {
+                    g2.setColor(bgColor.darker());
+                } else if (getModel().isRollover()) {
+                    g2.setColor(bgColor.brighter());
+                } else {
+                    g2.setColor(bgColor);
+                }
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 15, 15);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        button.setForeground(Color.WHITE);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        button.setFocusPainted(false);
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setPreferredSize(new Dimension(100, 32));
+        return button;
+    }
+
+    // =================== macOS BUTTONS ===================
+    private JButton createMacOSButton(Color color) {
+        JButton button = new JButton() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(color);
+                g2.fillOval(0, 0, getWidth(), getHeight());
+
+                if (getModel().isRollover()) {
+                    g2.setColor(Color.BLACK);
+                    g2.setStroke(new BasicStroke(1.2f));
+                    int cx = getWidth() / 2;
+                    int cy = getHeight() / 2;
+
+                    if (color.equals(new Color(0xFF5F57))) {
+                        g2.drawLine(cx - 3, cy - 3, cx + 3, cy + 3);
+                        g2.drawLine(cx + 3, cy - 3, cx - 3, cy + 3);
+                    } else if (color.equals(new Color(0xFFBD2E))) {
+                        g2.drawLine(cx - 3, cy, cx + 3, cy);
+                    } else if (color.equals(new Color(0x28CA42))) {
+                        if (isMaximized) {
+                            g2.drawRect(cx - 2, cy - 1, 3, 3);
+                            g2.drawRect(cx - 1, cy - 2, 3, 3);
+                        } else {
+                            g2.drawRect(cx - 2, cy - 2, 4, 4);
+                        }
+                    }
+                }
+                g2.dispose();
+            }
+        };
+        button.setPreferredSize(new Dimension(14, 14));
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setPreferredSize(new Dimension(15, 15));
+                button.revalidate();
+                button.repaint();
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setPreferredSize(new Dimension(14, 14));
+                button.revalidate();
+                button.repaint();
+            }
+        });
+        return button;
+    }
+
+    // =================== UTILITAS WINDOW ===================
+    private void toggleMaximize() {
+        if (isMaximized) {
+            setBounds(normalBounds);
+            isMaximized = false;
+        } else {
+            normalBounds = getBounds();
+            GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+            Rectangle screenBounds = ge.getMaximumWindowBounds();
+            setBounds(screenBounds);
+            isMaximized = true;
+        }
+        updateWindowShape();
+    }
+
+    private void addWindowDrag(Component comp) {
+        comp.addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent e) {
+                mousePoint = e.getPoint();
+            }
+        });
+        comp.addMouseMotionListener(new MouseMotionAdapter() {
+            public void mouseDragged(MouseEvent e) {
+                if (!isMaximized) {
+                    Point curr = e.getLocationOnScreen();
+                    setLocation(curr.x - mousePoint.x, curr.y - mousePoint.y);
+                }
+            }
+        });
+    }
+
+    private void updateWindowShape() {
+        if (!isMaximized) {
+            int arc = 20;
+            Shape shape = new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), arc, arc);
+            setShape(shape);
+        } else {
+            setShape(null);
+        }
+    }
+
+    @Override
+    public void setSize(int width, int height) {
+        super.setSize(width, height);
+        updateWindowShape();
+    }
+
+    @Override
+    public void setBounds(int x, int y, int width, int height) {
+        super.setBounds(x, y, width, height);
+        updateWindowShape();
+    }
+
+    // =================== LOGIC FORM ===================
+    // ... (semua method logika seperti filterTable, loadData, updateSemuaStatus, dll tetap sama seperti kode asli Anda)
     
     private void filterTable() {
         String searchText = txtSearch.getText().trim();
@@ -176,22 +437,19 @@ public class StatusPesananForm extends JFrame {
             sorter.setRowFilter(null);
         } else {
             try {
-                // Search di kolom ID, Pelanggan, dan Paket (kolom 0, 2, 3)
                 RowFilter<DefaultTableModel, Object> rf = RowFilter.orFilter(
                     java.util.Arrays.asList(
-                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 0), // ID
-                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 2), // Pelanggan
-                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 3)  // Paket
+                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 0),
+                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 2),
+                        RowFilter.regexFilter("(?i)" + Pattern.quote(searchText), 3)
                     )
                 );
                 sorter.setRowFilter(rf);
             } catch (java.util.regex.PatternSyntaxException e) {
-                // Jika ada error di regex, tampilkan semua data
                 sorter.setRowFilter(null);
             }
         }
         
-        // Update label info
         int visibleRows = table.getRowCount();
         int totalRows = model.getRowCount();
         
@@ -236,7 +494,6 @@ public class StatusPesananForm extends JFrame {
                 String statusBayar = rs.getString("status_bayar");
                 String tingkatCuci = rs.getString("pembayaran");
                 
-                // Override status bayar jika sudah ditandai LUNAS
                 if (tingkatCuci != null && tingkatCuci.contains("LUNAS")) {
                     statusBayar = "Lunas";
                 }
@@ -265,7 +522,6 @@ public class StatusPesananForm extends JFrame {
     private void updateComboBoxes() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow >= 0) {
-            // Konversi dari view row index ke model row index (untuk filtered table)
             int modelRow = table.convertRowIndexToModel(selectedRow);
             
             String statusPesanan = (String) model.getValueAt(modelRow, 5);
@@ -273,19 +529,16 @@ public class StatusPesananForm extends JFrame {
             
             cmbStatus.setSelectedItem(statusPesanan);
             
-            // Set status bayar di combobox
             if (statusBayar.equals("Lunas")) {
                 cmbStatusBayar.setSelectedIndex(1);
-                // VALIDASI: Jika sudah lunas, combobox jadi readonly
                 cmbStatusBayar.setEnabled(false);
                 cmbStatusBayar.setToolTipText("Pembayaran sudah lunas, tidak bisa diubah");
             } else {
                 if (statusBayar.equals("Belum Bayar")) {
                     cmbStatusBayar.setSelectedIndex(0);
-                } else { // Pending
+                } else {
                     cmbStatusBayar.setSelectedIndex(0);
                 }
-                // Belum lunas, masih bisa diubah
                 cmbStatusBayar.setEnabled(true);
                 cmbStatusBayar.setToolTipText(null);
             }
@@ -299,7 +552,6 @@ public class StatusPesananForm extends JFrame {
             return;
         }
         
-        // Konversi dari view row index ke model row index (untuk filtered table)
         int modelRow = table.convertRowIndexToModel(selectedRow);
         
         int idTransaksi = (Integer) model.getValueAt(modelRow, 0);
@@ -312,7 +564,6 @@ public class StatusPesananForm extends JFrame {
         boolean statusPesananBerubah = !statusPesananLama.equals(statusPesananBaru);
         boolean statusBayarBerubah = !statusBayarLama.equals(statusBayarBaru);
         
-        // Validasi: Cek apakah sudah lunas
         if (statusBayarLama.equals("Lunas") && statusBayarBerubah) {
             JOptionPane.showMessageDialog(this, 
                 "Pembayaran sudah lunas!\nTidak bisa mengubah status pembayaran.", 
@@ -326,20 +577,14 @@ public class StatusPesananForm extends JFrame {
             return;
         }
         
-        // LOGIKA AUTO DETECT: Apakah perlu update tanggal?
         boolean updateTanggal = false;
         String alasanUpdateTanggal = "";
         
-        // Update tanggal HANYA jika status pembayaran berubah (Belum Bayar → Lunas)
         if (statusBayarBerubah && statusBayarBaru.equals("Lunas")) {
             updateTanggal = true;
             alasanUpdateTanggal = "Pembayaran baru lunas";
         }
-        // TIDAK update tanggal jika:
-        // - Sudah lunas dari awal (statusBayarLama = Lunas dan tidak berubah)
-        // - Hanya update status pesanan saja
         
-        // Konfirmasi
         StringBuilder confirmMsg = new StringBuilder("Konfirmasi perubahan:\n\n");
         if (statusPesananBerubah) {
             confirmMsg.append(String.format("Status Pesanan: %s → %s\n", statusPesananLama, statusPesananBaru));
@@ -369,13 +614,11 @@ public class StatusPesananForm extends JFrame {
         try (Connection conn = DatabaseConnection.getConnection()) {
             String metodeBaruString = metodeLama;
             
-            // Update status pembayaran jika berubah
             if (statusBayarBerubah && statusBayarBaru.equals("Lunas")) {
                 if (!metodeLama.contains("LUNAS")) {
                     metodeBaruString = metodeLama + " - LUNAS";
                 }
                 
-                // Jika pembayaran ditunda dan sekarang dibayar, minta konfirmasi metode
                 if (metodeLama.contains("Bayar Setelah Selesai") && !metodeLama.contains("LUNAS")) {
                     String[] options = {"Cash", "QRIS"};
                     int choice = JOptionPane.showOptionDialog(
@@ -392,26 +635,23 @@ public class StatusPesananForm extends JFrame {
                     if (choice >= 0) {
                         metodeBaruString = options[choice] + " - Bayar Setelah Selesai - LUNAS";
                     } else {
-                        return; // User cancelled
+                        return;
                     }
                 }
             } else if (statusBayarBerubah && statusBayarBaru.equals("Belum Bayar")) {
                 metodeBaruString = metodeLama.replace(" - LUNAS", "");
             }
             
-            // Update ke database
             String sql;
             PreparedStatement pstmt;
             
             if (updateTanggal) {
-                // Update dengan tanggal baru (karena pembayaran baru lunas)
                 sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ?, tanggal_transaksi = NOW() WHERE id_transaksi = ?";
                 pstmt = conn.prepareStatement(sql);
                 pstmt.setString(1, statusPesananBaru);
                 pstmt.setString(2, metodeBaruString);
                 pstmt.setInt(3, idTransaksi);
             } else {
-                // Update tanpa mengubah tanggal (hanya update status pesanan atau sudah lunas dari awal)
                 sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ? WHERE id_transaksi = ?";
                 pstmt = conn.prepareStatement(sql);
                 pstmt.setString(1, statusPesananBaru);
@@ -453,11 +693,9 @@ public class StatusPesananForm extends JFrame {
             return;
         }
         
-        // Get actual row index from filtered table
         int actualRow = table.convertRowIndexToModel(selectedRow);
         int idTransaksi = (Integer) model.getValueAt(actualRow, 0);
         
-        // Create detail dialog
         JDialog detailDialog = new JDialog(this, "Detail Transaksi", true);
         detailDialog.setSize(500, 400);
         detailDialog.setLocationRelativeTo(this);
