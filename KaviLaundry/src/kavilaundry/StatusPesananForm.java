@@ -428,8 +428,6 @@ public class StatusPesananForm extends JFrame {
     }
 
     // =================== LOGIC FORM ===================
-    // ... (semua method logika seperti filterTable, loadData, updateSemuaStatus, dll tetap sama seperti kode asli Anda)
-    
     private void filterTable() {
         String searchText = txtSearch.getText().trim();
         
@@ -551,40 +549,48 @@ public class StatusPesananForm extends JFrame {
             JOptionPane.showMessageDialog(this, "Pilih pesanan untuk mengubah status!");
             return;
         }
-        
+    
         int modelRow = table.convertRowIndexToModel(selectedRow);
-        
+    
         int idTransaksi = (Integer) model.getValueAt(modelRow, 0);
         String statusPesananBaru = (String) cmbStatus.getSelectedItem();
         String statusPesananLama = (String) model.getValueAt(modelRow, 5);
         String statusBayarBaru = (String) cmbStatusBayar.getSelectedItem();
         String statusBayarLama = (String) model.getValueAt(modelRow, 6);
         String metodeLama = (String) model.getValueAt(modelRow, 7);
-        
+    
         boolean statusPesananBerubah = !statusPesananLama.equals(statusPesananBaru);
         boolean statusBayarBerubah = !statusBayarLama.equals(statusBayarBaru);
-        
+    
+        // VALIDASI: Jika status pesanan = "diambil", maka status bayar HARUS "Lunas"
+        if ("diambil".equals(statusPesananBaru) && !"Lunas".equals(statusBayarBaru)) {
+            JOptionPane.showMessageDialog(this,
+                "Untuk update status pesanan menjadi \"diambil\", status bayar harus di set \"Lunas\".",
+                "Validasi",
+                JOptionPane.WARNING_MESSAGE);
+            return; // Hentikan proses, jangan lanjut update
+        }
+    
+        // Jika status bayar lama sudah lunas, tidak bisa diubah
         if (statusBayarLama.equals("Lunas") && statusBayarBerubah) {
-            JOptionPane.showMessageDialog(this, 
-                "Pembayaran sudah lunas!\nTidak bisa mengubah status pembayaran.", 
-                "Validasi", 
+            JOptionPane.showMessageDialog(this,
+                "Pembayaran sudah lunas!\nTidak bisa mengubah status pembayaran.",
+                "Validasi",
                 JOptionPane.WARNING_MESSAGE);
             return;
         }
-        
+    
         if (!statusPesananBerubah && !statusBayarBerubah) {
             JOptionPane.showMessageDialog(this, "Tidak ada perubahan status!");
             return;
         }
-        
+    
         boolean updateTanggal = false;
-        String alasanUpdateTanggal = "";
-        
+    
         if (statusBayarBerubah && statusBayarBaru.equals("Lunas")) {
             updateTanggal = true;
-            alasanUpdateTanggal = "Pembayaran baru lunas";
         }
-        
+    
         StringBuilder confirmMsg = new StringBuilder("Konfirmasi perubahan:\n\n");
         if (statusPesananBerubah) {
             confirmMsg.append(String.format("Status Pesanan: %s → %s\n", statusPesananLama, statusPesananBaru));
@@ -592,33 +598,43 @@ public class StatusPesananForm extends JFrame {
         if (statusBayarBerubah) {
             confirmMsg.append(String.format("Status Bayar: %s → %s\n", statusBayarLama, statusBayarBaru));
         }
+    
+        // Jika status bayar menjadi Lunas, tampilkan detail pesanan
+        if (statusBayarBerubah && statusBayarBaru.equals("Lunas")) {
+            confirmMsg.append("\n═══════════════════════════════════════════\n");
+            confirmMsg.append("DETAIL PEMBAYARAN:\n");
+            confirmMsg.append(String.format("ID Transaksi : %d\n", idTransaksi));
+            confirmMsg.append(String.format("Pelanggan    : %s\n", model.getValueAt(modelRow, 2)));
+            confirmMsg.append(String.format("Paket        : %s\n", model.getValueAt(modelRow, 3)));
+            confirmMsg.append(String.format("Berat        : %s\n", model.getValueAt(modelRow, 4)));
+            confirmMsg.append(String.format("Total Biaya  : %s\n", model.getValueAt(modelRow, 8)));
+            confirmMsg.append("═══════════════════════════════════════════\n");
         
-        if (updateTanggal) {
-            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
-            confirmMsg.append(String.format("\n⚠️ Tanggal akan diupdate ke: %s\n", sdf.format(new java.util.Date())));
-            confirmMsg.append(String.format("   Alasan: %s\n", alasanUpdateTanggal));
+            // Tampilkan tanggal bayar
+            confirmMsg.append(String.format("\n⚠️ Tanggal akan diupdate ke: %s\n", 
+                new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(new java.util.Date())));
         } else {
             confirmMsg.append("\n✓ Tanggal tetap (tidak diubah)\n");
         }
-        
+    
         confirmMsg.append("\nLanjutkan?");
-        
-        int confirm = JOptionPane.showConfirmDialog(this, confirmMsg.toString(), 
-                                                     "Konfirmasi Update", 
-                                                     JOptionPane.YES_NO_OPTION);
-        
+    
+        int confirm = JOptionPane.showConfirmDialog(this, confirmMsg.toString(),
+            "Konfirmasi Update",
+            JOptionPane.YES_NO_OPTION);
+    
         if (confirm != JOptionPane.YES_OPTION) {
             return;
         }
-        
+    
         try (Connection conn = DatabaseConnection.getConnection()) {
             String metodeBaruString = metodeLama;
-            
+        
             if (statusBayarBerubah && statusBayarBaru.equals("Lunas")) {
                 if (!metodeLama.contains("LUNAS")) {
                     metodeBaruString = metodeLama + " - LUNAS";
                 }
-                
+            
                 if (metodeLama.contains("Bayar Setelah Selesai") && !metodeLama.contains("LUNAS")) {
                     String[] options = {"Cash", "QRIS"};
                     int choice = JOptionPane.showOptionDialog(
@@ -631,7 +647,7 @@ public class StatusPesananForm extends JFrame {
                         options,
                         options[0]
                     );
-                    
+                
                     if (choice >= 0) {
                         metodeBaruString = options[choice] + " - Bayar Setelah Selesai - LUNAS";
                     } else {
@@ -641,12 +657,12 @@ public class StatusPesananForm extends JFrame {
             } else if (statusBayarBerubah && statusBayarBaru.equals("Belum Bayar")) {
                 metodeBaruString = metodeLama.replace(" - LUNAS", "");
             }
-            
+        
             String sql;
             PreparedStatement pstmt;
-            
+        
             if (updateTanggal) {
-                sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ?, tanggal_transaksi = NOW() WHERE id_transaksi = ?";
+                sql = "UPDATE transaksi SET status_pesanan = ?, pembayaran = ?, tanggal_transaksi = NOW() WHERE     id_transaksi = ?";
                 pstmt = conn.prepareStatement(sql);
                 pstmt.setString(1, statusPesananBaru);
                 pstmt.setString(2, metodeBaruString);
@@ -658,9 +674,9 @@ public class StatusPesananForm extends JFrame {
                 pstmt.setString(2, metodeBaruString);
                 pstmt.setInt(3, idTransaksi);
             }
-            
+        
             pstmt.executeUpdate();
-            
+        
             StringBuilder successMsg = new StringBuilder("✅ Update berhasil!\n\n");
             if (statusPesananBerubah) {
                 successMsg.append(String.format("✓ Status Pesanan: %s → %s\n", statusPesananLama, statusPesananBaru));
@@ -668,21 +684,26 @@ public class StatusPesananForm extends JFrame {
             if (statusBayarBerubah) {
                 successMsg.append(String.format("✓ Status Bayar: %s → %s\n", statusBayarLama, statusBayarBaru));
             }
-            
+        
             if (updateTanggal) {
                 SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
                 successMsg.append(String.format("✓ Tanggal diupdate ke: %s\n", sdf.format(new java.util.Date())));
-                successMsg.append(String.format("  (%s)\n", alasanUpdateTanggal));
             } else {
                 successMsg.append("✓ Tanggal tetap (tidak diubah)\n");
             }
-            
+        
             JOptionPane.showMessageDialog(this, successMsg.toString(), "Sukses", JOptionPane.INFORMATION_MESSAGE);
+        
+            // Jika status bayar menjadi Lunas, tampilkan struk
+            if (statusBayarBerubah && statusBayarBaru.equals("Lunas")) {
+                showStrukPembayaran(idTransaksi);
+            }
+        
             loadData();
-            
+        
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(this, "Error updating status: " + e.getMessage(), 
-                                        "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error updating status: " + e.getMessage(),
+                "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
     
@@ -765,5 +786,99 @@ public class StatusPesananForm extends JFrame {
         detailDialog.add(scrollPane, BorderLayout.CENTER);
         detailDialog.add(btnPanel, BorderLayout.SOUTH);
         detailDialog.setVisible(true);
+    }
+
+    private void showStrukPembayaran(int idTransaksi) {
+        JDialog strukDialog = new JDialog(this, "Struk Transaksi", true);
+        strukDialog.setSize(450, 600);
+        strukDialog.setLocationRelativeTo(this);
+
+        JTextArea txtStruk = new JTextArea();
+        txtStruk.setEditable(false);
+        txtStruk.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        txtStruk.setMargin(new Insets(10, 10, 10, 10));
+
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String sql = "SELECT t.*, p.nama as nama_pelanggan, pk.harga as harga_kg, pk.nama as paket_nama, u.username " +
+                         "FROM transaksi t " +
+                         "LEFT JOIN pelanggan p ON t.id_pelanggan = p.id_pelanggan " +
+                         "LEFT JOIN paket pk ON t.id_jenis = pk.id " +
+                         "LEFT JOIN user u ON t.id_user = u.id_user " +
+                         "WHERE t.id_transaksi = ?";
+
+            PreparedStatement pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, idTransaksi);
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                SimpleDateFormat sdfDisplay = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+
+                StringBuilder struk = new StringBuilder();
+                struk.append("       ╔═══════════════════════════════════════════╗\n");
+                struk.append("       ║              KAVI LAUNDRY            ║\n");
+                struk.append("       ║            Jl. Contoh No. 123        ║\n");
+                struk.append("       ║           Telp: 0812-3456-7890       ║\n");
+                struk.append("       ╚═══════════════════════════════════════════╝\n\n");
+
+                struk.append("=================== STRUK PEMBAYARAN ===================\n\n");
+                struk.append(String.format("Tanggal      : %s\n", sdfDisplay.format(rs.getTimestamp("tanggal_transaksi"))));
+                struk.append(String.format("Kasir        : %s\n", rs.getString("username")));
+                struk.append("\n");
+
+                struk.append("=================== RINCIAN BIAYA =====================\n\n");
+                struk.append(String.format("Pelanggan    : %s\n", rs.getString("nama_pelanggan")));
+                struk.append(String.format("Paket        : %s\n", rs.getString("paket_nama")));
+                struk.append(String.format("Harga per kg : Rp %,.0f\n", rs.getDouble("harga_kg")));
+                struk.append(String.format("Berat total  : %.1f kg\n", rs.getDouble("berat_kg")));
+                struk.append(String.format("Biaya normal : Rp %,.0f\n", rs.getDouble("total_biaya")));
+                struk.append("\n");
+
+                struk.append("=================== TOTAL BAYAR =======================\n");
+                struk.append(String.format("TOTAL BAYAR  : Rp %,.0f\n", rs.getDouble("total_biaya")));
+                struk.append("\n");
+                String metodeBayar = rs.getString("pembayaran");
+                if (metodeBayar != null) {
+                    if (metodeBayar.contains("Cash")) {
+                        struk.append("Metode Bayar : Cash\n");
+                    } else if (metodeBayar.contains("QRIS")) {
+                        struk.append("Metode Bayar : QRIS\n");
+                    } else {
+                        struk.append("Metode Bayar : " + metodeBayar + "\n");
+                    }
+                }
+
+                struk.append("\n");
+                struk.append("=======================================================\n");
+                struk.append("Terima kasih atas kepercayaan\n");
+                struk.append("Anda kepada kami\n");
+                struk.append("=======================================================\n");
+
+                txtStruk.setText(struk.toString());
+            }
+        } catch (SQLException e) {
+            txtStruk.setText("Error loading receipt: " + e.getMessage());
+        }
+
+        JScrollPane scrollPane = new JScrollPane(txtStruk);
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+
+        JButton btnPrint = new JButton("Print");
+        btnPrint.addActionListener(e -> {
+            try {
+                txtStruk.print();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(strukDialog, "Gagal print: " + ex.getMessage());
+            }
+        });
+
+        JButton btnClose = new JButton("Tutup");
+        btnClose.addActionListener(e -> strukDialog.dispose());
+
+        buttonPanel.add(btnPrint);
+        buttonPanel.add(btnClose);
+
+        strukDialog.add(scrollPane, BorderLayout.CENTER);
+        strukDialog.add(buttonPanel, BorderLayout.SOUTH);
+        strukDialog.setVisible(true);
     }
 }
