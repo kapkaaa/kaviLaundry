@@ -4,6 +4,10 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.RoundRectangle2D;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 public class AdminDashboard extends JFrame {
     private JButton btnKelolaPegawai, btnKelolaHarga;
@@ -31,7 +35,7 @@ public class AdminDashboard extends JFrame {
         setLayout(new BorderLayout());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        // =================== PANEL UTAMA DENGAN ROUNDED BACKGROUND DAN TITLE BAR DI DALAMNYA ===================
+        // =================== PANEL UTAMA DENGAN ROUNDED BACKGROUND ===================
         JPanel mainPanel = new JPanel(new BorderLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
@@ -43,24 +47,31 @@ public class AdminDashboard extends JFrame {
                 super.paintComponent(g);
             }
         };
-        mainPanel.setOpaque(false); // Agar background rounded bisa terlihat
+        mainPanel.setOpaque(false);
 
-        // =================== TITLE BAR (DI DALAM PANEL UTAMA) ===================
-        JPanel titleBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10)) {
+        // =================== TITLE BAR (GRIDBAGLAYOUT - PRESISI) ===================
+        JPanel titleBar = new JPanel(new GridBagLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2d = (Graphics2D) g.create();
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2d.setColor(bgColor); // Sama dengan background
+                g2d.setColor(bgColor);
                 g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
                 g2d.dispose();
                 super.paintComponent(g);
             }
         };
         titleBar.setPreferredSize(new Dimension(700, 40));
-        titleBar.setOpaque(false); // Penting agar tidak override background rounded
+        titleBar.setOpaque(false);
 
-        // Tombol macOS
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(0, 5, 0, 5);
+        gbc.anchor = GridBagConstraints.CENTER;
+        gbc.fill = GridBagConstraints.NONE;
+
+        // --- TOMBOL macOS ---
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0)); // gap 8px
+        buttonPanel.setOpaque(false);
         JButton btnClose = createMacOSButton(new Color(0xFF5F57));
         JButton btnMinimize = createMacOSButton(new Color(0xFFBD2E));
         JButton btnMaximize = createMacOSButton(new Color(0x28CA42));
@@ -69,18 +80,35 @@ public class AdminDashboard extends JFrame {
         btnMinimize.addActionListener(e -> setState(JFrame.ICONIFIED));
         btnMaximize.addActionListener(e -> toggleMaximize());
 
-        titleBar.add(btnClose);
-        titleBar.add(btnMinimize);
-        titleBar.add(btnMaximize);
+        buttonPanel.add(btnClose);
+        buttonPanel.add(btnMinimize);
+        buttonPanel.add(btnMaximize);
 
-        // Judul dashboard di tengah title bar
-        JLabel titleLabel = new JLabel("Admin Dashboard", SwingConstants.CENTER);
+        // --- JUDUL ---
+        JLabel titleLabel = new JLabel("Admin Dashboard");
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
         titleLabel.setForeground(textMain);
-        titleLabel.setOpaque(false);
-        titleBar.add(Box.createHorizontalGlue());
-        titleBar.add(titleLabel);
-        titleBar.add(Box.createHorizontalGlue());
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+
+        // --- TANGGAL & WAKTU ---
+        JLabel dateTimeLabel = new JLabel("Memuat...", SwingConstants.RIGHT);
+        dateTimeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        dateTimeLabel.setForeground(textMain);
+        // Tidak ada border → mepet ke kanan
+
+        // Susun title bar
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 0.0;
+        titleBar.add(buttonPanel, gbc);
+
+        gbc.gridx = 1;
+        gbc.weightx = 1.0; // ambil ruang tengah
+        titleBar.add(titleLabel, gbc);
+
+        gbc.gridx = 2;
+        gbc.weightx = 0.0;
+        titleBar.add(dateTimeLabel, gbc);
 
         mainPanel.add(titleBar, BorderLayout.NORTH);
 
@@ -126,6 +154,9 @@ public class AdminDashboard extends JFrame {
         // Drag window hanya dari title bar
         addWindowDrag(titleBar);
         normalBounds = getBounds();
+
+        // Start real-time date & time updater
+        startDateTimeUpdater(dateTimeLabel);
     }
 
     // =================== STYLED BUTTON ===================
@@ -265,6 +296,23 @@ public class AdminDashboard extends JFrame {
     public void setBounds(int x, int y, int width, int height) {
         super.setBounds(x, y, width, height);
         updateWindowShape();
+    }
+
+    // =================== DATE & TIME UPDATER ===================
+    private void startDateTimeUpdater(JLabel label) {
+        ZoneId jakartaZone = ZoneId.of("Asia/Jakarta");
+        DateTimeFormatter formatter = DateTimeFormatter
+            .ofPattern("EEEE, dd-MM-yyyy HH:mm:ss", new Locale("id", "ID"));
+
+        updateDateTime(label, jakartaZone, formatter);
+
+        new Timer(1000, e -> updateDateTime(label, jakartaZone, formatter))
+            .start();
+    }
+
+    private void updateDateTime(JLabel label, ZoneId zone, DateTimeFormatter formatter) {
+        LocalDateTime now = LocalDateTime.now(zone);
+        label.setText(now.format(formatter));
     }
 
     // =================== LOGOUT ===================
