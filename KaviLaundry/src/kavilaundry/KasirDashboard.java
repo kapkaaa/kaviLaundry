@@ -4,6 +4,10 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.RoundRectangle2D;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 public class KasirDashboard extends JFrame {
     private JButton btnInputTransaksi, btnRiwayatTransaksi, btnLaporanKeuangan, btnStatusPesanan, btnLogout;
@@ -23,7 +27,7 @@ public class KasirDashboard extends JFrame {
         Color buttonBg = Color.decode("#6da395");
 
         setUndecorated(true);
-        setSize(500, 400); // sedikit lebih tinggi untuk ruang
+        setSize(500, 400);
         setBackground(new Color(0, 0, 0, 0));
         setLayout(new BorderLayout());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -42,8 +46,8 @@ public class KasirDashboard extends JFrame {
         };
         mainPanel.setOpaque(false);
 
-        // =================== TITLE BAR ===================
-        JPanel titleBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10)) {
+        // =================== TITLE BAR (GRIDBAGLAYOUT - PRECISE ALIGNMENT) ===================
+        JPanel titleBar = new JPanel(new GridBagLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2d = (Graphics2D) g.create();
@@ -57,6 +61,14 @@ public class KasirDashboard extends JFrame {
         titleBar.setPreferredSize(new Dimension(500, 40));
         titleBar.setOpaque(false);
 
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(0, 5, 0, 5); // padding kecil antar elemen
+        gbc.anchor = GridBagConstraints.CENTER; // ⭐️ PENTING: agar semua sejajar vertikal
+        gbc.fill = GridBagConstraints.NONE;
+
+        // --- TOMBOL macOS ---
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        buttonPanel.setOpaque(false);
         JButton btnClose = createMacOSButton(new Color(0xFF5F57));
         JButton btnMinimize = createMacOSButton(new Color(0xFFBD2E));
         JButton btnMaximize = createMacOSButton(new Color(0x28CA42));
@@ -65,19 +77,37 @@ public class KasirDashboard extends JFrame {
         btnMinimize.addActionListener(e -> setState(JFrame.ICONIFIED));
         btnMaximize.addActionListener(e -> toggleMaximize());
 
-        titleBar.add(btnClose);
-        titleBar.add(btnMinimize);
-        titleBar.add(btnMaximize);
+        buttonPanel.add(btnClose);
+        buttonPanel.add(btnMinimize);
+        buttonPanel.add(btnMaximize);
 
-        JLabel titleLabel = new JLabel("Kasir Dashboard", SwingConstants.CENTER);
+        // --- JUDUL ---
+        JLabel titleLabel = new JLabel("Kasir Dashboard");
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
         titleLabel.setForeground(textMain);
-        titleLabel.setOpaque(false);
-        titleBar.add(Box.createHorizontalGlue());
-        titleBar.add(titleLabel);
-        titleBar.add(Box.createHorizontalGlue());
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
 
-        mainPanel.add(titleBar, BorderLayout.NORTH);
+        // --- TANGGAL & WAKTU (mepet kanan atas) ---
+        JLabel dateTimeLabel = new JLabel("Memuat...", SwingConstants.RIGHT);
+        dateTimeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        dateTimeLabel.setForeground(textMain);
+        // Tidak perlu border — biarkan mepet
+
+        // Susun dengan GridBagLayout
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 0.0;
+        titleBar.add(buttonPanel, gbc);
+
+        gbc.gridx = 1;
+        gbc.weightx = 1.0; // ambil ruang kosong di tengah
+        titleBar.add(titleLabel, gbc);
+
+        gbc.gridx = 2;
+        gbc.weightx = 0.0;
+        titleBar.add(dateTimeLabel, gbc);
+
+        mainPanel.add(titleBar, BorderLayout.NORTH);                
 
         // =================== HEADER SELAMAT DATANG ===================
         JPanel headerPanel = new JPanel();
@@ -90,40 +120,40 @@ public class KasirDashboard extends JFrame {
 
         // =================== MENU PANEL DENGAN GRIDBAGLAYOUT ===================
         JPanel contentPanel = new JPanel(new GridBagLayout());
-        contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 40, 40, 40)); // lebih banyak ruang bawah
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 40, 40, 40));
         contentPanel.setOpaque(false);
 
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(10, 10, 10, 10);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 1.0;
-        gbc.weighty = 0.1; // agar tombol tidak tengah, tapi lebih ke atas
+        GridBagConstraints gbcc = new GridBagConstraints();
+        gbcc.insets = new Insets(10, 10, 10, 10);
+        gbcc.fill = GridBagConstraints.HORIZONTAL;
+        gbcc.weightx = 1.0;
+        gbcc.weighty = 0.1;
 
         // Baris 1
-        gbc.gridx = 0; gbc.gridy = 0;
+        gbcc.gridx = 0; gbcc.gridy = 0;
         btnInputTransaksi = createStyledButton("💳\nInput Transaksi");
-        contentPanel.add(btnInputTransaksi, gbc);
+        contentPanel.add(btnInputTransaksi, gbcc);
 
-        gbc.gridx = 1; gbc.gridy = 0;
+        gbcc.gridx = 1; gbcc.gridy = 0;
         btnRiwayatTransaksi = createStyledButton("📋\nRiwayat Transaksi");
-        contentPanel.add(btnRiwayatTransaksi, gbc);
+        contentPanel.add(btnRiwayatTransaksi, gbcc);
 
         // Baris 2
-        gbc.gridx = 0; gbc.gridy = 1;
+        gbcc.gridx = 0; gbcc.gridy = 1;
         btnStatusPesanan = createStyledButton("📦\nStatus Pesanan");
-        contentPanel.add(btnStatusPesanan, gbc);
+        contentPanel.add(btnStatusPesanan, gbcc);
 
-        gbc.gridx = 1; gbc.gridy = 1;
+        gbcc.gridx = 1; gbcc.gridy = 1;
         btnLaporanKeuangan = createStyledButton("📊\nLaporan Keuangan");
-        contentPanel.add(btnLaporanKeuangan, gbc);
+        contentPanel.add(btnLaporanKeuangan, gbcc);
 
         // Baris 3 - Logout di tengah
-        gbc.gridx = 0; gbc.gridy = 2;
-        gbc.gridwidth = 2;
-        gbc.anchor = GridBagConstraints.CENTER;
+        gbcc.gridx = 0; gbcc.gridy = 2;
+        gbcc.gridwidth = 2;
+        gbcc.anchor = GridBagConstraints.CENTER;
         btnLogout = createStyledButton("🚪\nLogout");
         btnLogout.setPreferredSize(new Dimension(180, 60));
-        contentPanel.add(btnLogout, gbc);
+        contentPanel.add(btnLogout, gbcc);
 
         mainPanel.add(contentPanel, BorderLayout.SOUTH);
         add(mainPanel, BorderLayout.CENTER);
@@ -138,6 +168,9 @@ public class KasirDashboard extends JFrame {
         // Drag window
         addWindowDrag(titleBar);
         normalBounds = getBounds();
+
+        // Start real-time date & time updater
+        startDateTimeUpdater(dateTimeLabel);
     }
 
     // =================== STYLED BUTTON ===================
@@ -277,6 +310,23 @@ public class KasirDashboard extends JFrame {
     public void setBounds(int x, int y, int width, int height) {
         super.setBounds(x, y, width, height);
         updateWindowShape();
+    }
+
+    // =================== DATE & TIME UPDATER ===================
+    private void startDateTimeUpdater(JLabel label) {
+        ZoneId jakartaZone = ZoneId.of("Asia/Jakarta");
+        DateTimeFormatter formatter = DateTimeFormatter
+            .ofPattern("EEEE, dd-MM-yyyy HH:mm:ss", new Locale("id", "ID"));
+
+        updateDateTime(label, jakartaZone, formatter);
+
+        new Timer(1000, e -> updateDateTime(label, jakartaZone, formatter))
+            .start();
+    }
+
+    private void updateDateTime(JLabel label, ZoneId zone, DateTimeFormatter formatter) {
+        LocalDateTime now = LocalDateTime.now(zone);
+        label.setText(now.format(formatter));
     }
 
     // =================== LOGOUT ===================
