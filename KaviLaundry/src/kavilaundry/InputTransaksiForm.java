@@ -502,7 +502,6 @@ public class InputTransaksiForm extends JFrame {
     }
 
     // =================== LOGIC FORM ===================
-    // ... (semua method logika seperti loadPaketData, hitungTotal, simpanTransaksi, dll tetap sama seperti kode asli Anda)
     
     private void updateEstimasiTanggalAmbil() {
         if (cmbPaket.getSelectedIndex() < 0 || paketList.isEmpty()) {
