@@ -90,7 +90,7 @@ public class LoginForm extends JFrame {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        JLabel lblTitle = new JLabel("WELCOME", SwingConstants.CENTER);
+        JLabel lblTitle = new JLabel("KAVILAUNDRY", SwingConstants.CENTER);
         lblTitle.setFont(new Font("Segoe UI", Font.BOLD, 28));
         lblTitle.setForeground(textMain);
         gbc.gridx = 0; gbc.gridy = 0;
