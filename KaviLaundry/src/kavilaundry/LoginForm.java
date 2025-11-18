@@ -90,11 +90,34 @@ public class LoginForm extends JFrame {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
+        // 🖼️ Logo
+        JLabel lblLogo = new JLabel();
+        try {
+            ImageIcon originalIcon = new ImageIcon(getClass().getResource("/images/Logo.jpg"));
+            if (originalIcon.getIconWidth() > 0 && originalIcon.getIconHeight() > 0) {
+                Image scaledImage = originalIcon.getImage().getScaledInstance(80, 80, Image.SCALE_SMOOTH);
+                lblLogo.setIcon(new ImageIcon(scaledImage));
+            } else {
+                lblLogo.setText("LOGO");
+                lblLogo.setFont(new Font("Segoe UI", Font.BOLD, 16));
+                lblLogo.setForeground(textMain);
+            }
+        } catch (Exception e) {
+            lblLogo.setText("LOGO ERROR");
+            lblLogo.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            lblLogo.setForeground(Color.RED);
+        }
+        lblLogo.setHorizontalAlignment(SwingConstants.CENTER);
+        gbc.gridx = 0; gbc.gridy = 0;
+        gbc.insets = new Insets(20, 0, 5, 0);
+        contentPanel.add(lblLogo, gbc);
+
+        // 👤 Judul
         JLabel lblTitle = new JLabel("KAVILAUNDRY", SwingConstants.CENTER);
         lblTitle.setFont(new Font("Segoe UI", Font.BOLD, 28));
         lblTitle.setForeground(textMain);
-        gbc.gridx = 0; gbc.gridy = 0;
-        gbc.insets = new Insets(10, 0, 30, 0);
+        gbc.gridy = 1;
+        gbc.insets = new Insets(5, 0, 30, 0);
         contentPanel.add(lblTitle, gbc);
 
         // 👤 Username
@@ -104,7 +127,7 @@ public class LoginForm extends JFrame {
         styleTextField(txtUsername, "Username", textSub, textMain);
 
         JPanel userPanel = createInputPanel(iconUser, txtUsername, bgColor);
-        gbc.gridy = 1; gbc.insets = new Insets(5, 0, 15, 0);
+        gbc.gridy = 2; gbc.insets = new Insets(5, 0, 15, 0);
         contentPanel.add(userPanel, gbc);
 
         // 🔒 Password
@@ -114,7 +137,7 @@ public class LoginForm extends JFrame {
         stylePasswordField(txtPassword, "Password", textSub, textMain);
 
         JPanel passPanel = createInputPanel(iconLock, txtPassword, bgColor);
-        gbc.gridy = 2; gbc.insets = new Insets(5, 0, 20, 0);
+        gbc.gridy = 3; gbc.insets = new Insets(5, 0, 20, 0);
         contentPanel.add(passPanel, gbc);
 
         // 🔘 Tombol login
@@ -128,7 +151,7 @@ public class LoginForm extends JFrame {
         getRootPane().setDefaultButton(btnLogin);
 
         btnLogin.addActionListener(e -> login());
-        gbc.gridy = 3; gbc.insets = new Insets(10, 60, 10, 60);
+        gbc.gridy = 4; gbc.insets = new Insets(10, 60, 10, 60);
         contentPanel.add(btnLogin, gbc);
 
         mainPanel.add(contentPanel, BorderLayout.CENTER);
