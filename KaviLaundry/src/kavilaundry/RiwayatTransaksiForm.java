@@ -1,22 +1,27 @@
 package kavilaundry;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.RoundRectangle2D;
 import java.sql.*;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.List;
 
 public class RiwayatTransaksiForm extends JFrame {
     private JTable table;
     private DefaultTableModel model;
     private JTextField txtCariNama;
     private JCheckBox chkShowPending;
-    private JButton btnCari, btnRefresh, btnDetail, btnTutup;
+    private JButton btnDetail, btnTutup;
     private Point mousePoint;
     private boolean isMaximized = false;
     private Rectangle normalBounds;
+    private List<Object[]> allTransactions = new ArrayList<>();
 
     public RiwayatTransaksiForm() {
         setUndecorated(true);
@@ -29,7 +34,6 @@ public class RiwayatTransaksiForm extends JFrame {
     private void initComponents() {
         Color bgColor = Color.decode("#b3ebf2");
         Color textMain = Color.decode("#222222");
-        Color buttonBg = Color.decode("#6da395");
         Color detailBg = Color.decode("#4A90E2");
         Color tableBg = Color.WHITE;
 
@@ -90,21 +94,15 @@ public class RiwayatTransaksiForm extends JFrame {
         mainPanel.add(titleBar, BorderLayout.NORTH);
 
         // =================== PANEL PENCARIAN ===================
-        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5)) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-            }
-        };
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         searchPanel.setOpaque(false);
 
-        searchPanel.add(createLabel("Cari Nama Pelanggan:"));
+        searchPanel.add(createLabel("Cari data:"));
 
-        txtCariNama = createStyledTextField(20);
+        txtCariNama = createStyledTextField(25);
         searchPanel.add(txtCariNama);
 
-        btnCari = createActionButton("Cari", buttonBg);
-        btnRefresh = createActionButton("Refresh", Color.decode("#FFA500"));
+        // Hanya tombol Detail dan Tutup
         btnDetail = createActionButton("Detail", detailBg);
         btnTutup = createActionButton("Tutup", Color.decode("#AAAAAA"));
 
@@ -122,26 +120,16 @@ public class RiwayatTransaksiForm extends JFrame {
         chkShowPending.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         chkShowPending.setForeground(textMain);
         chkShowPending.setOpaque(false);
-        chkShowPending.addActionListener(e -> loadData());
 
-        btnCari.addActionListener(e -> cariTransaksi());
-        btnRefresh.addActionListener(e -> loadData());
         btnDetail.addActionListener(e -> showDetail());
         btnTutup.addActionListener(e -> dispose());
 
-        searchPanel.add(btnCari);
-        searchPanel.add(btnRefresh);
         searchPanel.add(chkShowPending);
         searchPanel.add(btnDetail);
         searchPanel.add(btnTutup);
 
         // Wrap in titled border
-        JPanel searchWrapper = new JPanel(new BorderLayout()) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-            }
-        };
+        JPanel searchWrapper = new JPanel(new BorderLayout());
         searchWrapper.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createLineBorder(Color.GRAY, 1), "Pencarian"));
         searchWrapper.setOpaque(false);
@@ -161,7 +149,7 @@ public class RiwayatTransaksiForm extends JFrame {
         table.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
         table.setRowHeight(25);
-        table.setSelectionBackground(buttonBg);
+        table.setSelectionBackground(Color.decode("#6da395"));
         table.setSelectionForeground(Color.WHITE);
 
         table.getColumnModel().getColumn(0).setPreferredWidth(50);
@@ -199,8 +187,26 @@ public class RiwayatTransaksiForm extends JFrame {
         mainPanel.add(tablePanel, BorderLayout.CENTER);
         add(mainPanel, BorderLayout.CENTER);
 
-        // Enter key untuk pencarian
-        txtCariNama.addActionListener(e -> cariTransaksi());
+        // Live search listener
+        txtCariNama.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                applyFilter(txtCariNama.getText());
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                applyFilter(txtCariNama.getText());
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                applyFilter(txtCariNama.getText());
+            }
+        });
+
+        // Checkbox listener
+        chkShowPending.addActionListener(e -> applyFilter(txtCariNama.getText()));
 
         // Drag window
         addWindowDrag(titleBar);
@@ -260,7 +266,6 @@ public class RiwayatTransaksiForm extends JFrame {
         return button;
     }
 
-    // =================== macOS BUTTONS ===================
     private JButton createMacOSButton(Color color) {
         JButton button = new JButton() {
             @Override
@@ -316,7 +321,6 @@ public class RiwayatTransaksiForm extends JFrame {
         return button;
     }
 
-    // =================== UTILITAS WINDOW ===================
     private void toggleMaximize() {
         if (isMaximized) {
             setBounds(normalBounds);
@@ -371,63 +375,32 @@ public class RiwayatTransaksiForm extends JFrame {
 
     // =================== LOGIC FORM ===================
     private void loadData() {
-        loadData(null);
-    }
-
-    private void loadData(String namaPelanggan) {
-        model.setRowCount(0);
+        allTransactions.clear();
         try (Connection conn = DatabaseConnection.getConnection()) {
-            StringBuilder sql = new StringBuilder();
-            sql.append("SELECT t.id_transaksi, t.tanggal_transaksi, p.nama, ");
-            sql.append("pk.nama as paket_nama, t.berat_kg, t.total_biaya, ");
-            sql.append("t.status_pesanan, u.username, t.pembayaran, ");
-            sql.append("CASE ");
-            sql.append("   WHEN t.pembayaran LIKE '%Bayar Sekarang%' THEN 'Lunas' ");
-            sql.append("   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.status_pesanan = 'selesai' AND t.pembayaran NOT LIKE '%LUNAS%' THEN 'Belum Bayar' ");
-            sql.append("   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.pembayaran LIKE '%LUNAS%' THEN 'Lunas' ");
-            sql.append("   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' THEN 'Pending' ");
-            sql.append("   ELSE 'Lunas' ");
-            sql.append("END as status_bayar ");
-            sql.append("FROM transaksi t ");
-            sql.append("LEFT JOIN pelanggan p ON t.id_pelanggan = p.id_pelanggan ");
-            sql.append("LEFT JOIN paket pk ON t.id_jenis = pk.id ");
-            sql.append("LEFT JOIN user u ON t.id_user = u.id_user ");
+            String sql = "SELECT t.id_transaksi, t.tanggal_transaksi, p.nama, " +
+                         "pk.nama as paket_nama, t.berat_kg, t.total_biaya, " +
+                         "t.status_pesanan, u.username, t.pembayaran, " +
+                         "CASE " +
+                         "   WHEN t.pembayaran LIKE '%Bayar Sekarang%' THEN 'Lunas' " +
+                         "   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.status_pesanan = 'selesai' AND t.pembayaran NOT LIKE '%LUNAS%' THEN 'Belum Bayar' " +
+                         "   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.pembayaran LIKE '%LUNAS%' THEN 'Lunas' " +
+                         "   WHEN t.pembayaran LIKE '%Bayar Setelah Selesai%' THEN 'Pending' " +
+                         "   ELSE 'Lunas' " +
+                         "END as status_bayar " +
+                         "FROM transaksi t " +
+                         "LEFT JOIN pelanggan p ON t.id_pelanggan = p.id_pelanggan " +
+                         "LEFT JOIN paket pk ON t.id_jenis = pk.id " +
+                         "LEFT JOIN user u ON t.id_user = u.id_user " +
+                         "ORDER BY t.tanggal_transaksi DESC";
 
-            boolean hasWhere = false;
-
-            if (namaPelanggan != null && !namaPelanggan.trim().isEmpty()) {
-                sql.append("WHERE p.nama LIKE ? ");
-                hasWhere = true;
-            }
-
-            if (chkShowPending.isSelected()) {
-                if (hasWhere) {
-                    sql.append("AND ");
-                } else {
-                    sql.append("WHERE ");
-                }
-                sql.append("(t.pembayaran LIKE '%Bayar Setelah Selesai%' AND t.pembayaran NOT LIKE '%LUNAS%') ");
-            }
-
-            sql.append("ORDER BY t.tanggal_transaksi DESC");
-
-            PreparedStatement pstmt = conn.prepareStatement(sql.toString());
-
-            if (namaPelanggan != null && !namaPelanggan.trim().isEmpty()) {
-                pstmt.setString(1, "%" + namaPelanggan + "%");
-            }
-
+            PreparedStatement pstmt = conn.prepareStatement(sql);
             ResultSet rs = pstmt.executeQuery();
             SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm");
 
             while (rs.next()) {
                 String statusBayar = rs.getString("status_bayar");
                 String tingkatCuci = rs.getString("pembayaran");
-
-                String metodeBayar = "Cash - Bayar Sekarang";
-                if (tingkatCuci != null) {
-                    metodeBayar = tingkatCuci.replace(" - LUNAS", "");
-                }
+                String metodeBayar = tingkatCuci != null ? tingkatCuci.replace(" - LUNAS", "") : "Cash - Bayar Sekarang";
 
                 Object[] row = {
                     rs.getInt("id_transaksi"),
@@ -441,16 +414,42 @@ public class RiwayatTransaksiForm extends JFrame {
                     metodeBayar,
                     rs.getString("username")
                 };
-                model.addRow(row);
+                allTransactions.add(row);
             }
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this, "Error loading data: " + e.getMessage());
         }
+
+        applyFilter("");
     }
 
-    private void cariTransaksi() {
-        String namaPelanggan = txtCariNama.getText().trim();
-        loadData(namaPelanggan);
+    private void applyFilter(String keyword) {
+        model.setRowCount(0);
+        String lowerKeyword = keyword.toLowerCase().trim();
+
+        for (Object[] row : allTransactions) {
+            boolean match = false;
+
+            // Filter checkbox: hanya tampilkan jika status bayar pending atau belum bayar
+            if (chkShowPending.isSelected()) {
+                String statusBayar = (String) row[7];
+                if (!"Pending".equals(statusBayar) && !"Belum Bayar".equals(statusBayar)) {
+                    continue;
+                }
+            }
+
+            // Cari di semua kolom
+            for (Object cell : row) {
+                if (cell != null && cell.toString().toLowerCase().contains(lowerKeyword)) {
+                    match = true;
+                    break;
+                }
+            }
+
+            if (match) {
+                model.addRow(row);
+            }
+        }
     }
 
     private void showDetail() {
